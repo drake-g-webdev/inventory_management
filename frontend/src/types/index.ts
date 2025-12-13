@@ -1,0 +1,414 @@
+// User Roles
+export type UserRole = 'admin' | 'camp_worker' | 'purchasing_supervisor' | 'purchasing_team';
+
+export interface User {
+  id: number;
+  email: string;
+  full_name: string | null;
+  role: UserRole;
+  is_active: boolean;
+  property_id: number | null;
+  property_name?: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface Property {
+  id: number;
+  name: string;
+  code: string;
+  address: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface Supplier {
+  id: number;
+  name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface InventoryItem {
+  id: number;
+  property_id: number;
+  name: string;
+  description: string | null;
+  category: string | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  unit: string;
+  par_level: number | null;
+  current_stock: number;
+  avg_weekly_usage: number | null;
+  unit_price: number | null;
+  sort_order: number;
+  is_active: boolean;
+  is_recurring: boolean;
+  is_low_stock: boolean;
+  suggested_order_qty: number;
+  created_at: string;
+  updated_at: string | null;
+}
+
+// Order System
+export type OrderStatus =
+  | 'draft'
+  | 'submitted'
+  | 'under_review'
+  | 'approved'
+  | 'changes_requested'
+  | 'ordered'
+  | 'partially_received'
+  | 'received'
+  | 'cancelled';
+
+export type OrderItemFlag = 'low_stock' | 'trend_suggested' | 'manual' | 'custom';
+
+export interface OrderItem {
+  id: number;
+  order_id: number;
+  inventory_item_id: number | null;
+  custom_item_name: string | null;
+  requested_quantity: number;
+  approved_quantity: number | null;
+  received_quantity: number | null;
+  unit: string;
+  unit_price: number | null;
+  flag: OrderItemFlag | null;
+  notes: string | null;
+  reviewer_notes: string | null;
+  item_name?: string | null;
+  supplier_name?: string | null;
+  final_quantity?: number;
+  line_total?: number;
+  is_received?: boolean;
+  has_issue?: boolean;
+  issue_description?: string | null;
+  receiving_notes?: string | null;
+}
+
+export interface Order {
+  id: number;
+  order_number?: string;
+  property_id: number;
+  property_name?: string | null;
+  week_of: string;
+  status: OrderStatus;
+  created_by: number;
+  created_by_name?: string | null;
+  reviewed_by: number | null;
+  reviewed_by_name?: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  approved_at: string | null;
+  ordered_at: string | null;
+  received_at: string | null;
+  notes: string | null;
+  review_notes: string | null;
+  estimated_total?: number;
+  actual_total?: number | null;
+  total_requested_value: number | null;
+  total_approved_value: number | null;
+  created_at: string;
+  updated_at: string | null;
+  items: OrderItem[];
+  item_count?: number;
+}
+
+// Inventory Counting
+export interface InventoryCountItem {
+  id: number;
+  count_id: number;
+  inventory_item_id: number;
+  counted_quantity: number | null;
+  item_name?: string | null;
+  unit?: string | null;
+  par_level?: number | null;
+}
+
+export interface InventoryCount {
+  id: number;
+  property_id: number;
+  property_name?: string | null;
+  count_date: string;
+  counted_by: number;
+  counted_by_name?: string | null;
+  notes: string | null;
+  is_complete: boolean;
+  photo_url: string | null;
+  ai_suggestions: any | null;
+  created_at: string;
+  updated_at: string | null;
+  items: InventoryCountItem[];
+}
+
+// Receipt System
+export interface ReceiptLineItem {
+  item_name?: string;
+  name?: string;
+  quantity?: number;
+  unit_price?: number;
+  total_price?: number;
+  total?: number;
+  matched_order_item_id?: number | null;
+  matched_inventory_item_id?: number | null;
+}
+
+export interface UnmatchedReceiptItem {
+  item_name: string;
+  suggested_name?: string | null;
+  quantity?: number | null;
+  unit_price?: number | null;
+  total_price?: number | null;
+  suggested_category?: string | null;
+}
+
+export interface Receipt {
+  id: number;
+  order_id: number | null;
+  property_id?: number | null;
+  supplier_id: number | null;
+  supplier_name?: string | null;
+  detected_supplier_name?: string | null;
+  image_url: string;
+  receipt_date: string | null;
+  receipt_number: string | null;
+  subtotal: number | null;
+  tax: number | null;
+  total: number | null;
+  line_items: ReceiptLineItem[] | null;
+  unmatched_items?: UnmatchedReceiptItem[] | null;
+  is_processed: boolean;
+  processing_error: string | null;
+  confidence_score: number | null;
+  is_manually_verified: boolean;
+  verified_by: number | null;
+  verified_at: string | null;
+  uploaded_by: number;
+  uploaded_by_name?: string | null;
+  notes: string | null;
+  order_number?: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+// Dashboard Data
+export interface SupplierSpendingSummary {
+  supplier_id: number;
+  supplier_name: string;
+  total_spent: number;
+  receipt_count: number;
+  avg_receipt_amount: number;
+}
+
+export interface PropertySpendingSummary {
+  property_id: number;
+  property_name: string;
+  total_spent: number;
+  receipt_count: number;
+  order_count: number;
+}
+
+export interface SpendingByPeriod {
+  period: string;
+  total_spent: number;
+  receipt_count: number;
+  order_count: number;
+}
+
+export interface FinancialDashboard {
+  total_spent_this_month: number;
+  total_spent_this_year: number;
+  pending_orders_total: number;
+  receipts_pending_verification: number;
+  spending_by_supplier: SupplierSpendingSummary[];
+  spending_by_property: PropertySpendingSummary[];
+  spending_trend: SpendingByPeriod[];
+}
+
+export interface PropertyDashboard {
+  property: Property;
+  inventory_count: number;
+  low_stock_count: number;
+  pending_orders: number;
+  recent_counts: InventoryCount[];
+}
+
+// Auth
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface AuthToken {
+  access_token: string;
+  token_type: string;
+}
+
+// Create/Update Payloads
+export interface CreatePropertyPayload {
+  name: string;
+  code: string;
+  address?: string | null;
+}
+
+export interface CreateUserPayload {
+  email: string;
+  password: string;
+  full_name?: string | null;
+  role: UserRole;
+  property_id?: number | null;
+}
+
+export interface UpdateUserPayload {
+  email?: string;
+  full_name?: string | null;
+  role?: UserRole;
+  property_id?: number | null;
+  is_active?: boolean;
+}
+
+export interface CreateSupplierPayload {
+  name: string;
+  contact_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  notes?: string | null;
+}
+
+export interface CreateInventoryItemPayload {
+  property_id: number;
+  name: string;
+  description?: string | null;
+  category?: string | null;
+  supplier_id?: number | null;
+  unit: string;
+  par_level?: number | null;
+  current_stock?: number;
+  unit_price?: number | null;
+  is_recurring?: boolean;
+}
+
+export interface CreateOrderPayload {
+  property_id: number;
+  week_of?: string;
+  notes?: string | null;
+  items: {
+    inventory_item_id?: number | null;
+    custom_item_name?: string | null;
+    requested_quantity: number;
+    unit?: string | null;
+    unit_price?: number | null;
+    flag?: OrderItemFlag | null;
+    camp_notes?: string | null;
+  }[];
+}
+
+export interface UpdateOrderItemPayload {
+  quantity_approved?: number | null;
+  review_notes?: string | null;
+}
+
+export interface CreateInventoryCountPayload {
+  property_id: number;
+  count_date: string;
+  notes?: string | null;
+  items: {
+    inventory_item_id: number;
+    counted_quantity: number | null;
+  }[];
+}
+
+export interface CreateReceiptPayload {
+  order_id?: number | null;
+  supplier_id?: number | null;
+  image_url: string;
+  notes?: string | null;
+}
+
+// Role permission helpers
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Administrator',
+  camp_worker: 'Camp Worker',
+  purchasing_supervisor: 'Purchasing Supervisor',
+  purchasing_team: 'Purchasing Team',
+};
+
+export const canManageUsers = (role: UserRole): boolean => role === 'admin';
+export const canManageProperties = (role: UserRole): boolean => role === 'admin';
+export const canManageInventory = (role: UserRole): boolean => role === 'camp_worker' || role === 'admin';
+export const canCreateOrders = (role: UserRole): boolean => role === 'camp_worker';
+export const canReviewOrders = (role: UserRole): boolean => role === 'purchasing_supervisor';
+export const canManageReceipts = (role: UserRole): boolean => role === 'purchasing_team' || role === 'purchasing_supervisor';
+export const canViewAllProperties = (role: UserRole): boolean => role !== 'camp_worker';
+
+// Supplier Purchase List (for viewing approved orders grouped by supplier)
+export interface SupplierPurchaseItem {
+  item_id: number;
+  item_name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number | null;
+  line_total: number | null;
+  order_id: number;
+  order_number: string;
+  property_name: string;
+}
+
+export interface SupplierPurchaseGroup {
+  supplier_id: number | null;
+  supplier_name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  items: SupplierPurchaseItem[];
+  total_items: number;
+  total_value: number;
+}
+
+export interface SupplierPurchaseList {
+  suppliers: SupplierPurchaseGroup[];
+  order_ids: number[];
+  total_orders: number;
+  grand_total: number;
+}
+
+// Flagged items for purchasing team dashboard
+export interface FlaggedItem {
+  item_id: number;
+  item_name: string;
+  order_id: number;
+  order_number: string;
+  property_id: number;
+  property_name: string;
+  received_quantity: number;
+  approved_quantity: number | null;
+  has_issue: boolean;
+  issue_description: string | null;
+  receiving_notes: string | null;
+  received_at: string | null;
+  flagged_by_name: string | null;
+}
+
+export interface FlaggedItemsList {
+  items: FlaggedItem[];
+  total_count: number;
+}
+
+// Receiving payload for order items
+export interface ReceiveItemPayload {
+  item_id: number;
+  received_quantity: number;
+  has_issue?: boolean;
+  issue_description?: string;
+  receiving_notes?: string;
+}
