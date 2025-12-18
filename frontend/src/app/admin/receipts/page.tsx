@@ -8,14 +8,11 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { useReceipts, useUploadReceipt, useVerifyReceipt, useDeleteReceipt, useDeleteReceiptLineItem, useUpdateReceiptLineItem, useFinancialDashboard, useReceiptProperties, useReceiptOrdersByProperty, useAddToInventory, useSearchInventoryForMatching, useMatchReceiptItem } from '@/hooks/useReceipts';
 import { useSuppliers } from '@/hooks/useSuppliers';
-import { useAuthStore } from '@/stores/authStore';
 import { formatCurrency } from '@/lib/utils';
 import type { Receipt, UnmatchedReceiptItem } from '@/types';
 import toast from 'react-hot-toast';
 
-export default function ReceiptsPage() {
-  const { user } = useAuthStore();
-  const canUpload = user?.role === 'purchasing_team';
+export default function AdminReceiptsPage() {
   const { data: receipts = [], isLoading } = useReceipts();
   const { data: financialData } = useFinancialDashboard();
   const { data: properties = [] } = useReceiptProperties();
@@ -356,20 +353,18 @@ export default function ReceiptsPage() {
   };
 
   return (
-    <RoleGuard allowedRoles={['purchasing_team', 'purchasing_supervisor']}>
+    <RoleGuard allowedRoles={['admin']}>
       <DashboardLayout>
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Receipts</h1>
-              <p className="text-gray-500 mt-1">{canUpload ? 'Upload and manage purchase receipts' : 'View purchase receipts and financial data'}</p>
+              <p className="text-gray-500 mt-1">Upload and manage purchase receipts</p>
             </div>
-            {canUpload && (
-              <Button onClick={() => setShowUpload(true)}>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Receipt
-              </Button>
-            )}
+            <Button onClick={() => setShowUpload(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Upload Receipt
+            </Button>
           </div>
 
           {/* Financial Summary */}
@@ -426,10 +421,9 @@ export default function ReceiptsPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Camp</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Receipt #</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -439,16 +433,13 @@ export default function ReceiptsPage() {
                   {filteredReceipts.map((receipt) => (
                     <tr key={receipt.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-medium text-gray-900">{receipt.property_name || '-'}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {receipt.order_number || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-gray-900">{receipt.supplier_name || 'Unknown'}</span>
+                        <span className="font-medium text-gray-900">{receipt.supplier_name || 'Unknown'}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {receipt.receipt_date ? new Date(receipt.receipt_date).toLocaleDateString() : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {receipt.receipt_number || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {receipt.total ? formatCurrency(receipt.total) : '-'}

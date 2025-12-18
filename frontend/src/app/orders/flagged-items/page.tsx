@@ -1,19 +1,43 @@
 'use client';
 
-import { AlertTriangle, Package, ExternalLink, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, Package, ExternalLink, ArrowLeft, CheckCircle, Image as ImageIcon } from 'lucide-react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
-import { useFlaggedItems } from '@/hooks/useOrders';
+import { useFlaggedItems, useResolveFlaggedItem } from '@/hooks/useOrders';
 import { useProperties } from '@/hooks/useProperties';
 import { useState } from 'react';
 import type { FlaggedItem } from '@/types';
+import toast from 'react-hot-toast';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005';
+
+// Helper to get full image URL from relative path
+const getImageUrl = (path: string | null) => {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  return `${API_URL}${path}`;
+};
 
 export default function FlaggedItemsPage() {
   const [selectedPropertyId, setSelectedPropertyId] = useState<number | undefined>(undefined);
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const { data: flaggedData, isLoading } = useFlaggedItems(selectedPropertyId);
   const { data: properties = [] } = useProperties();
+  const resolveFlaggedItem = useResolveFlaggedItem();
+
+  const handleResolve = async (itemId: number, itemName: string) => {
+    if (!confirm(`Are you sure you want to mark "${itemName}" as resolved? This will remove it from the flagged items list.`)) {
+      return;
+    }
+    try {
+      await resolveFlaggedItem.mutateAsync(itemId);
+      toast.success(`"${itemName}" resolved successfully`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to resolve item');
+    }
+  };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
@@ -125,6 +149,14 @@ export default function FlaggedItemsPage() {
                             <div className="flex items-center gap-2 mb-2">
                               <AlertTriangle className="h-5 w-5 text-amber-500" />
                               <span className="font-semibold text-gray-900">{item.item_name}</span>
+                              <button
+                                onClick={() => handleResolve(item.item_id, item.item_name)}
+                                disabled={resolveFlaggedItem.isPending}
+                                className="ml-auto inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-full hover:bg-green-700 transition-colors disabled:opacity-50"
+                              >
+                                <CheckCircle className="h-3 w-3" />
+                                Resolve
+                              </button>
                             </div>
 
                             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-3">
@@ -134,6 +166,17 @@ export default function FlaggedItemsPage() {
                               <p className="text-amber-900 mt-1 italic">
                                 &ldquo;{item.issue_description || 'No description provided'}&rdquo;
                               </p>
+                              {item.issue_photo_url && (
+                                <div className="mt-3">
+                                  <button
+                                    onClick={() => setViewingPhoto(getImageUrl(item.issue_photo_url))}
+                                    className="inline-flex items-center gap-2 text-amber-700 hover:text-amber-900"
+                                  >
+                                    <ImageIcon className="h-4 w-4" />
+                                    <span className="text-sm font-medium underline">View Photo</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
 
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -181,6 +224,31 @@ export default function FlaggedItemsPage() {
             )}
           </div>
         </div>
+
+        {/* Photo Viewer Modal */}
+        {viewingPhoto && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75"
+            onClick={() => setViewingPhoto(null)}
+          >
+            <div className="relative max-w-4xl max-h-[90vh] p-4">
+              <button
+                onClick={() => setViewingPhoto(null)}
+                className="absolute top-2 right-2 p-2 bg-white rounded-full text-gray-800 hover:bg-gray-200 shadow-lg"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <img
+                src={viewingPhoto}
+                alt="Issue photo"
+                className="max-w-full max-h-[85vh] rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        )}
       </DashboardLayout>
     </RoleGuard>
   );

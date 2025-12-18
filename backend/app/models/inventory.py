@@ -35,15 +35,20 @@ class InventoryItem(Base):
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True, index=True)  # e.g., "Dairy", "Produce", "Protein"
+    subcategory = Column(String(100), nullable=True, index=True)  # e.g., "BIB", "Cans/Bottles", "Dry"
     brand = Column(String(255), nullable=True)
 
     # Supplier info
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
 
     # Unit and quantity info
-    unit = Column(String(50), nullable=False, default="unit")  # case, gallon, lb, unit, etc.
+    unit = Column(String(50), nullable=False, default="unit")  # Inventory/counting unit: box, bottle, etc.
     pack_size = Column(Float, nullable=True)  # e.g., 24 for a case of 24
     pack_unit = Column(String(50), nullable=True)  # e.g., "oz" for each item in the case
+
+    # Order unit conversion (for when ordering unit differs from counting unit)
+    order_unit = Column(String(50), nullable=True)  # e.g., "case" when counting by "box"
+    units_per_order_unit = Column(Float, nullable=True, default=1.0)  # e.g., 8 boxes per case
 
     # Pricing
     unit_price = Column(Float, nullable=True)  # Price per unit (case, gallon, etc.)
@@ -59,6 +64,7 @@ class InventoryItem(Base):
 
     # For printable list ordering
     sort_order = Column(Integer, default=0)
+    last_sorted_at = Column(DateTime(timezone=True), nullable=True)  # When item was last included in AI sort
 
     # Whether this item appears on recurring inventory printout sheets
     # One-off items are stored but won't appear on the printout
@@ -74,6 +80,7 @@ class InventoryItem(Base):
     supplier = relationship("Supplier", back_populates="inventory_items")
     inventory_counts = relationship("InventoryCountItem", back_populates="inventory_item")
     order_items = relationship("OrderItem", back_populates="inventory_item")
+    receipt_aliases = relationship("ReceiptCodeAlias", back_populates="inventory_item", cascade="all, delete-orphan")
 
     def is_low_stock(self) -> bool:
         """Check if item is below par level"""
@@ -82,14 +89,41 @@ class InventoryItem(Base):
         return (self.current_stock or 0) < self.par_level
 
     def suggested_order_qty(self) -> float:
-        """Suggest order quantity based on usage and par level"""
+        """
+        Suggest order quantity in ORDER UNITS based on usage and par level.
+        Returns quantity in order units (e.g., cases), rounded up to whole units.
+        """
+        # Calculate needed quantity in inventory units
         if self.avg_weekly_usage and self.par_level:
             # Order enough for 1 week plus buffer to par level
-            needed = self.par_level - (self.current_stock or 0) + self.avg_weekly_usage
-            return max(0, needed)
+            needed_inventory_units = self.par_level - (self.current_stock or 0) + self.avg_weekly_usage
         elif self.par_level:
-            return max(0, self.par_level - (self.current_stock or 0))
-        return 0
+            needed_inventory_units = self.par_level - (self.current_stock or 0)
+        else:
+            return 0
+
+        needed_inventory_units = max(0, needed_inventory_units)
+
+        if needed_inventory_units == 0:
+            return 0
+
+        # Convert to order units if conversion is set
+        units_per_order = self.units_per_order_unit or 1.0
+        if units_per_order > 0:
+            # Calculate order units needed, rounded up to whole order units
+            import math
+            order_qty = math.ceil(needed_inventory_units / units_per_order)
+            return order_qty
+
+        return needed_inventory_units
+
+    def get_effective_order_unit(self) -> str:
+        """Get the unit used for ordering (falls back to inventory unit if not set)"""
+        return self.order_unit or self.unit
+
+    def get_units_per_order_unit(self) -> float:
+        """Get conversion factor (defaults to 1 if not set)"""
+        return self.units_per_order_unit or 1.0
 
 
 class InventoryCount(Base):
@@ -139,3 +173,37 @@ class InventoryCountItem(Base):
     # Relationships
     inventory_count = relationship("InventoryCount", back_populates="items")
     inventory_item = relationship("InventoryItem", back_populates="inventory_counts")
+
+
+class ReceiptCodeAlias(Base):
+    """
+    Maps receipt codes/names to inventory items.
+    Stores supplier-specific receipt codes that should match to a particular inventory item.
+    For example: "KS FREE N CL" from Costco -> "Laundry Detergent" inventory item
+    """
+    __tablename__ = "receipt_code_aliases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True, index=True)
+
+    # The code/name as it appears on the receipt
+    receipt_code = Column(String(255), nullable=False, index=True)
+
+    # Price from this supplier (can differ between suppliers)
+    unit_price = Column(Float, nullable=True)
+
+    # When this alias was last seen on a receipt
+    last_seen = Column(DateTime(timezone=True), nullable=True)
+
+    # How many times this alias has been used
+    match_count = Column(Integer, default=0)
+
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    inventory_item = relationship("InventoryItem", back_populates="receipt_aliases")
+    supplier = relationship("Supplier", back_populates="receipt_aliases")

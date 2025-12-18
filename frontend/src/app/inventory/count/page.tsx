@@ -77,7 +77,7 @@ export default function InventoryCountPage() {
       .filter(([, qty]) => qty !== null)
       .map(([id, qty]) => ({
         inventory_item_id: parseInt(id),
-        quantity: qty as number,
+        counted_quantity: qty as number,
       }));
 
     try {
@@ -208,100 +208,142 @@ export default function InventoryCountPage() {
       return;
     }
 
+    // Flatten all items into a single list for two-column layout
+    const allItems = Object.entries(groupedItems).flatMap(([category, items]) =>
+      items.map(item => ({ ...item, categoryName: category }))
+    );
+
+    // Split items into two columns
+    const midpoint = Math.ceil(allItems.length / 2);
+    const leftColumn = allItems.slice(0, midpoint);
+    const rightColumn = allItems.slice(midpoint);
+
+    const renderItem = (item: any, index: number) => `
+      <tr>
+        <td class="item-name">${item.name}</td>
+        <td class="unit-cell">${item.unit}</td>
+        <td class="par-cell">${item.par_level || '-'}</td>
+        <td class="count-cell"></td>
+      </tr>
+    `;
+
+    const renderColumn = (items: any[]) => {
+      let currentCategory = '';
+      let html = '';
+
+      items.forEach((item, index) => {
+        if (item.categoryName !== currentCategory) {
+          currentCategory = item.categoryName;
+          html += `<tr class="category-row"><td colspan="4">${currentCategory}</td></tr>`;
+        }
+        html += renderItem(item, index);
+      });
+
+      return html;
+    };
+
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>Inventory Count Form - ${user?.property_name || 'Property'}</title>
         <style>
-          * { box-sizing: border-box; }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            font-size: 12px;
+            font-size: 9px;
+            line-height: 1.2;
+            padding: 8px;
           }
           .header {
             text-align: center;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #333;
-            padding-bottom: 15px;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #333;
           }
-          .header h1 { margin: 0 0 5px 0; font-size: 24px; }
-          .header p { margin: 5px 0; color: #666; }
+          .header h1 { font-size: 16px; margin-bottom: 2px; }
+          .header p { font-size: 10px; color: #666; margin: 1px 0; }
           .info-row {
             display: flex;
-            gap: 30px;
-            margin-bottom: 20px;
-            padding: 10px;
+            gap: 20px;
+            margin-bottom: 8px;
+            padding: 6px;
             background: #f5f5f5;
+            font-size: 9px;
           }
-          .info-row .field {
+          .info-row .field { flex: 1; }
+          .info-row label { font-weight: bold; display: block; margin-bottom: 2px; }
+          .info-row .line { border-bottom: 1px solid #333; height: 16px; }
+
+          .two-column-container {
+            display: flex;
+            gap: 10px;
+          }
+          .column {
             flex: 1;
-          }
-          .info-row label {
-            font-weight: bold;
-            display: block;
-            margin-bottom: 5px;
-          }
-          .info-row .line {
-            border-bottom: 1px solid #333;
-            height: 25px;
-          }
-          .category-section {
-            margin-bottom: 20px;
-            page-break-inside: avoid;
-          }
-          .category-header {
-            background: #333;
-            color: white;
-            padding: 8px 12px;
-            font-weight: bold;
-            font-size: 14px;
+            min-width: 0;
           }
           table {
             width: 100%;
             border-collapse: collapse;
+            font-size: 8px;
           }
           th, td {
             border: 1px solid #ccc;
-            padding: 8px;
+            padding: 2px 4px;
             text-align: left;
           }
           th {
-            background: #f0f0f0;
+            background: #e0e0e0;
             font-weight: bold;
+            font-size: 7px;
+            text-transform: uppercase;
+          }
+          .category-row td {
+            background: #333;
+            color: white;
+            font-weight: bold;
+            font-size: 8px;
+            padding: 3px 4px;
+          }
+          .item-name {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
           .count-cell {
-            width: 100px;
+            width: 45px;
+            min-width: 45px;
             background: #fffef0;
           }
-          .unit-cell { width: 80px; }
-          .par-cell { width: 80px; text-align: center; }
-          .notes-cell { width: 150px; }
+          .unit-cell { width: 35px; min-width: 35px; font-size: 7px; }
+          .par-cell { width: 30px; min-width: 30px; text-align: center; }
+
           .footer {
-            margin-top: 30px;
-            padding-top: 15px;
+            margin-top: 8px;
+            padding-top: 6px;
             border-top: 1px solid #ccc;
-            font-size: 11px;
+            font-size: 8px;
             color: #666;
           }
+
           @media print {
-            body { padding: 10px; }
+            body { padding: 5px; }
             .no-print { display: none; }
+            @page { margin: 0.3in; }
           }
         </style>
       </head>
       <body>
         <div class="header">
           <h1>Inventory Count Form</h1>
-          <p><strong>${user?.property_name || 'Property'}</strong></p>
-          <p>Generated: ${today}</p>
+          <p><strong>${user?.property_name || 'Property'}</strong> | ${today}</p>
         </div>
 
         <div class="info-row">
           <div class="field">
-            <label>Count Date:</label>
+            <label>Date:</label>
             <div class="line"></div>
           </div>
           <div class="field">
@@ -310,37 +352,41 @@ export default function InventoryCountPage() {
           </div>
         </div>
 
-        ${Object.entries(groupedItems).map(([category, items]) => `
-          <div class="category-section">
-            <div class="category-header">${category} (${items.length} items)</div>
+        <div class="two-column-container">
+          <div class="column">
             <table>
               <thead>
                 <tr>
-                  <th>Item Name</th>
+                  <th>Item</th>
                   <th class="unit-cell">Unit</th>
-                  <th class="par-cell">Par Level</th>
+                  <th class="par-cell">Par</th>
                   <th class="count-cell">Count</th>
-                  <th class="notes-cell">Notes</th>
                 </tr>
               </thead>
               <tbody>
-                ${items.map(item => `
-                  <tr>
-                    <td>${item.name}</td>
-                    <td class="unit-cell">${item.unit}</td>
-                    <td class="par-cell">${item.par_level || '-'}</td>
-                    <td class="count-cell"></td>
-                    <td class="notes-cell"></td>
-                  </tr>
-                `).join('')}
+                ${renderColumn(leftColumn)}
               </tbody>
             </table>
           </div>
-        `).join('')}
+          <div class="column">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th class="unit-cell">Unit</th>
+                  <th class="par-cell">Par</th>
+                  <th class="count-cell">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${renderColumn(rightColumn)}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
         <div class="footer">
-          <p><strong>Instructions:</strong> Count each item and record the quantity in the "Count" column. Add any notes for discrepancies or observations.</p>
-          <p>Total Items: ${inventoryItems.length} | Categories: ${Object.keys(groupedItems).length}</p>
+          <p>Total: ${inventoryItems.length} items | ${Object.keys(groupedItems).length} categories</p>
         </div>
 
         <script>

@@ -17,13 +17,15 @@ interface OrderLineItem {
   inventory_item_id: number | null;
   custom_item_name: string | null;
   quantity_requested: number;
-  unit: string;
-  unit_price: number | null;
+  unit: string;  // This is now the ORDER unit (effective_order_unit)
   flag: OrderItemFlag | null;
   notes: string | null;
   // For display
   name: string;
   suggested_qty: number;
+  par_level: number | null;
+  current_stock: number | null;
+  inventory_unit: string | null;  // The unit used for counting
 }
 
 export default function NewOrderPage() {
@@ -54,19 +56,23 @@ export default function NewOrderPage() {
     return matchesSearch && notAlreadyAdded;
   });
 
-  // Auto-populate with low stock items
+  // Auto-populate with low stock items (only recurring items - not one-offs)
   useEffect(() => {
     if (lowStock.length > 0 && items.length === 0) {
-      const lowStockItems: OrderLineItem[] = lowStock.map(item => ({
+      // Filter out non-recurring (one-off) items - they should never be auto-added
+      const recurringLowStock = lowStock.filter(item => item.is_recurring !== false);
+      const lowStockItems: OrderLineItem[] = recurringLowStock.map(item => ({
         inventory_item_id: item.id,
         custom_item_name: null,
-        quantity_requested: item.suggested_order_qty,
-        unit: item.unit,
-        unit_price: item.unit_price,
+        quantity_requested: Math.ceil(item.suggested_order_qty),
+        unit: item.effective_order_unit || item.unit,  // Use order unit for ordering
         flag: 'low_stock',
         notes: null,
         name: item.name,
-        suggested_qty: item.suggested_order_qty,
+        suggested_qty: Math.ceil(item.suggested_order_qty),
+        par_level: item.par_level,
+        current_stock: item.current_stock,
+        inventory_unit: item.unit,  // Keep track of counting unit
       }));
       setItems(lowStockItems);
     }
@@ -83,11 +89,13 @@ export default function NewOrderPage() {
         custom_item_name: customItemName,
         quantity_requested: 1,
         unit: customUnit,
-        unit_price: null,
         flag: 'custom',
         notes: null,
         name: customItemName,
         suggested_qty: 0,
+        par_level: null,
+        current_stock: null,
+        inventory_unit: null,
       }]);
       setCustomItemName('');
       setCustomUnit('unit');
@@ -104,13 +112,15 @@ export default function NewOrderPage() {
       setItems([...items, {
         inventory_item_id: invItem.id,
         custom_item_name: null,
-        quantity_requested: invItem.suggested_order_qty || 1,
-        unit: invItem.unit,
-        unit_price: invItem.unit_price,
+        quantity_requested: Math.ceil(invItem.suggested_order_qty) || 1,
+        unit: invItem.effective_order_unit || invItem.unit,  // Use order unit
         flag: 'manual',
         notes: null,
         name: invItem.name,
-        suggested_qty: invItem.suggested_order_qty,
+        suggested_qty: Math.ceil(invItem.suggested_order_qty),
+        par_level: invItem.par_level,
+        current_stock: invItem.current_stock,
+        inventory_unit: invItem.unit,  // Keep track of counting unit
       }]);
     }
     setSelectedItemId('');
@@ -119,7 +129,7 @@ export default function NewOrderPage() {
 
   const updateItemQuantity = (index: number, quantity: number) => {
     const updated = [...items];
-    updated[index].quantity_requested = quantity;
+    updated[index].quantity_requested = Math.max(0, Math.floor(quantity));
     setItems(updated);
   };
 
@@ -142,7 +152,6 @@ export default function NewOrderPage() {
         custom_item_name: item.custom_item_name,
         requested_quantity: item.quantity_requested,
         unit: item.unit,
-        unit_price: item.unit_price,
         flag: item.flag,
         camp_notes: item.notes,
       })),
@@ -168,10 +177,6 @@ export default function NewOrderPage() {
       toast.error(errorMessage);
     }
   };
-
-  const totalValue = items.reduce((sum, item) => {
-    return sum + (item.unit_price || 0) * item.quantity_requested;
-  }, 0);
 
   return (
     <RoleGuard allowedRoles={['camp_worker']}>
@@ -218,16 +223,17 @@ export default function NewOrderPage() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flag</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Quantity</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Par</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Current</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Order Qty</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Est. Cost</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase w-16">Remove</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                         No items added yet. Click "Add Item" to get started.
                       </td>
                     </tr>
@@ -249,13 +255,27 @@ export default function NewOrderPage() {
                             {item.flag?.replace('_', ' ') || 'manual'}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-600">
+                          {item.par_level ?? '-'}
+                          {item.par_level !== null && item.inventory_unit && (
+                            <span className="text-xs text-gray-400 ml-1">{item.inventory_unit}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm text-gray-600">
+                          <span className={item.current_stock !== null && item.par_level !== null && item.current_stock < item.par_level ? 'text-yellow-600 font-medium' : ''}>
+                            {item.current_stock ?? '-'}
+                          </span>
+                          {item.current_stock !== null && item.inventory_unit && (
+                            <span className="text-xs text-gray-400 ml-1">{item.inventory_unit}</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <input
                             type="number"
                             min="0"
-                            step="0.5"
+                            step="1"
                             value={item.quantity_requested}
-                            onChange={(e) => updateItemQuantity(index, parseFloat(e.target.value) || 0)}
+                            onChange={(e) => updateItemQuantity(index, parseInt(e.target.value) || 0)}
                             className="w-20 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
                           />
                           {item.suggested_qty > 0 && item.quantity_requested !== item.suggested_qty && (
@@ -263,9 +283,6 @@ export default function NewOrderPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">{item.unit}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900">
-                          {item.unit_price ? `$${(item.unit_price * item.quantity_requested).toFixed(2)}` : '-'}
-                        </td>
                         <td className="px-4 py-3 text-right">
                           <button onClick={() => removeItem(index)} className="text-red-600 hover:text-red-900">
                             <Trash2 className="h-4 w-4" />
@@ -275,15 +292,6 @@ export default function NewOrderPage() {
                     ))
                   )}
                 </tbody>
-                {items.length > 0 && (
-                  <tfoot className="bg-gray-50">
-                    <tr>
-                      <td colSpan={4} className="px-4 py-3 text-right font-medium">Estimated Total:</td>
-                      <td className="px-4 py-3 font-bold text-primary-600">${totalValue.toFixed(2)}</td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                )}
               </table>
             </div>
 
@@ -329,13 +337,15 @@ export default function NewOrderPage() {
                               setItems([...items, {
                                 inventory_item_id: item.id,
                                 custom_item_name: null,
-                                quantity_requested: item.suggested_order_qty || 1,
-                                unit: item.unit,
-                                unit_price: item.unit_price,
+                                quantity_requested: Math.ceil(item.suggested_order_qty) || 1,
+                                unit: item.effective_order_unit || item.unit,  // Use order unit
                                 flag: item.is_low_stock ? 'low_stock' : 'manual',
                                 notes: null,
                                 name: item.name,
-                                suggested_qty: item.suggested_order_qty,
+                                suggested_qty: Math.ceil(item.suggested_order_qty),
+                                par_level: item.par_level,
+                                current_stock: item.current_stock,
+                                inventory_unit: item.unit,  // Keep track of counting unit
                               }]);
                             }
                           }}

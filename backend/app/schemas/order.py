@@ -32,6 +32,7 @@ class OrderItemUpdate(BaseModel):
     is_received: Optional[bool] = None
     has_issue: Optional[bool] = None
     issue_description: Optional[str] = None
+    supplier_id: Optional[int] = None  # Allow changing supplier during review
 
     class Config:
         populate_by_name = True
@@ -57,6 +58,8 @@ class OrderItemResponse(OrderItemBase):
 class OrderItemWithDetails(OrderItemResponse):
     item_name: str
     supplier_name: Optional[str] = None
+    par_level: Optional[float] = None
+    current_stock: Optional[float] = None
     final_quantity: float
     line_total: float
 
@@ -131,6 +134,7 @@ class OrderReceiveItemRequest(BaseModel):
     received_quantity: float
     has_issue: bool = False
     issue_description: Optional[str] = None
+    issue_photo_url: Optional[str] = None
     receiving_notes: Optional[str] = None
 
 
@@ -169,6 +173,7 @@ class PropertyOrderSummary(BaseModel):
 class SupplierPurchaseItem(BaseModel):
     item_id: int
     item_name: str
+    category: Optional[str] = None
     quantity: float
     unit: str
     unit_price: Optional[float] = None
@@ -208,6 +213,7 @@ class FlaggedItemResponse(BaseModel):
     approved_quantity: Optional[float] = None
     has_issue: bool
     issue_description: Optional[str] = None
+    issue_photo_url: Optional[str] = None
     receiving_notes: Optional[str] = None
     received_at: Optional[datetime] = None
     flagged_by_name: Optional[str] = None

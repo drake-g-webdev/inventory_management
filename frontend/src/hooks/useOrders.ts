@@ -121,10 +121,23 @@ export function useMarkOrderOrdered() {
   });
 }
 
+export function useUnmarkOrderOrdered() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const response = await api.post<Order>(`/orders/${id}/unmark-ordered`, {});
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
 export function useReceiveOrderItems() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, items }: { id: number; items: { item_id: number; received_quantity: number; has_issue?: boolean; issue_description?: string; receiving_notes?: string }[] }) => {
+    mutationFn: async ({ id, items }: { id: number; items: { item_id: number; received_quantity: number; has_issue?: boolean; issue_description?: string; issue_photo_url?: string; receiving_notes?: string }[] }) => {
       const response = await api.post<Order>(`/orders/${id}/receive`, { items });
       return response.data;
     },
@@ -135,11 +148,71 @@ export function useReceiveOrderItems() {
   });
 }
 
+export function useUploadIssuePhoto() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      // For file uploads, we need axios to auto-detect FormData and set the proper
+      // multipart/form-data header with boundary. We explicitly set to undefined
+      // to override the default application/json header.
+      const response = await api.post<{ url: string }>(
+        '/orders/upload-issue-photo',
+        formData,
+        {
+          headers: {
+            'Content-Type': undefined as unknown as string,
+          },
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
 export function useUpdateOrderItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ orderId, itemId, data }: { orderId: number; itemId: number; data: { quantity_approved?: number; review_notes?: string } }) => {
+    mutationFn: async ({ orderId, itemId, data }: { orderId: number; itemId: number; data: { quantity_approved?: number; review_notes?: string; supplier_id?: number } }) => {
       const response = await api.put(`/orders/${orderId}/items/${itemId}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+export function useUpdateDraftOrderItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orderId, itemId, quantity }: { orderId: number; itemId: number; quantity: number }) => {
+      const response = await api.patch(`/orders/${orderId}/items/${itemId}`, null, { params: { quantity } });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+export function useDeleteOrderItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orderId, itemId }: { orderId: number; itemId: number }) => {
+      await api.delete(`/orders/${orderId}/items/${itemId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+export function useAddOrderItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orderId, item }: { orderId: number; item: { inventory_item_id?: number; custom_item_name?: string; requested_quantity: number; unit?: string; flag?: string } }) => {
+      const response = await api.post(`/orders/${orderId}/items`, item);
       return response.data;
     },
     onSuccess: () => {
@@ -175,6 +248,19 @@ export function useFlaggedItems(propertyId?: number) {
       const params = propertyId ? { property_id: propertyId } : {};
       const response = await api.get<FlaggedItemsList>('/orders/flagged-items', { params });
       return response.data;
+    },
+  });
+}
+
+export function useResolveFlaggedItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (itemId: number) => {
+      const response = await api.post(`/orders/items/${itemId}/resolve-flag`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['flagged-items'] });
     },
   });
 }

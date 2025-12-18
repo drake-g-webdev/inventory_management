@@ -79,7 +79,6 @@ def send_order_submitted_notification(
     property_name: str,
     submitted_by: str,
     item_count: int,
-    estimated_total: float,
     week_of: str
 ) -> bool:
     """
@@ -132,10 +131,6 @@ def send_order_submitted_notification(
                     <span class="label">Items:</span>
                     <span class="value">{item_count} items</span>
                 </div>
-                <div class="detail-row">
-                    <span class="label">Estimated Total:</span>
-                    <span class="value">${estimated_total:,.2f}</span>
-                </div>
 
                 <p style="margin-top: 20px;">
                     Please log in to the purchasing system to review this order.
@@ -161,7 +156,6 @@ def send_order_submitted_notification(
     Submitted By: {submitted_by}
     Week Of: {week_of}
     Items: {item_count}
-    Estimated Total: ${estimated_total:,.2f}
 
     Please log in to the purchasing system to review this order.
     {settings.FRONTEND_URL}/supervisor/orders

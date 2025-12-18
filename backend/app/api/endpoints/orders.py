@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 import uuid
 import logging
+import os
 
 from app.core.database import get_db
 from app.core.security import (
@@ -36,9 +37,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
-def generate_order_number() -> str:
-    """Generate unique order number"""
-    return f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+def generate_order_number(property_code: str) -> str:
+    """Generate order number with property code and date (e.g., YRC-20251215)"""
+    return f"{property_code}-{datetime.utcnow().strftime('%Y%m%d')}"
 
 
 def calculate_order_total(order: Order) -> float:
@@ -125,18 +126,28 @@ def get_supplier_purchase_list(
     db: Session = Depends(get_db)
 ):
     """
-    Get purchase list grouped by supplier from approved orders.
-    If order_ids is provided, only those orders are included.
-    Otherwise, all approved orders are included.
+    Get purchase list grouped by supplier from approved/ordered orders.
+    If order_ids is provided, only those orders are included (approved, ordered, partially_received, received).
+    Otherwise, only approved orders are included (for creating purchase lists).
     """
+    # Statuses that can be viewed in a purchase list
+    viewable_statuses = [
+        OrderStatus.APPROVED.value,
+        OrderStatus.ORDERED.value,
+        OrderStatus.PARTIALLY_RECEIVED.value,
+        OrderStatus.RECEIVED.value
+    ]
+
     # Parse order IDs if provided
     if order_ids:
         ids = [int(id.strip()) for id in order_ids.split(",") if id.strip()]
+        # When viewing specific orders, allow any viewable status
         orders = db.query(Order).filter(
             Order.id.in_(ids),
-            Order.status == OrderStatus.APPROVED.value
+            Order.status.in_(viewable_statuses)
         ).all()
     else:
+        # When getting all orders (for aggregated purchase list), only show approved
         orders = db.query(Order).filter(
             Order.status == OrderStatus.APPROVED.value
         ).all()
@@ -189,8 +200,10 @@ def get_supplier_purchase_list(
             # Get item name
             if item.inventory_item:
                 item_name = item.inventory_item.name
+                item_category = item.inventory_item.category
             else:
                 item_name = item.custom_item_name or "Custom Item"
+                item_category = None
 
             # Calculate quantity and price
             quantity = item.approved_quantity if item.approved_quantity is not None else item.requested_quantity
@@ -201,6 +214,7 @@ def get_supplier_purchase_list(
             purchase_item = SupplierPurchaseItem(
                 item_id=item.id,
                 item_name=item_name,
+                category=item_category,
                 quantity=quantity,
                 unit=item.unit or "",
                 unit_price=unit_price,
@@ -250,6 +264,100 @@ def list_my_orders(
     return result
 
 
+# ============== FLAGGED ITEMS ==============
+
+@router.get("/flagged-items", response_model=FlaggedItemsList)
+def get_flagged_items(
+    property_id: Optional[int] = None,
+    current_user: User = Depends(require_purchasing_team),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all items that were flagged with issues during receiving.
+    For purchasing team dashboard to see quality/delivery issues.
+    Example: 'Yukon River Camp flagged Cilantro: "Cilantro was wilted and slimy when it arrived"'
+    """
+    # Query order items that have issues
+    query = db.query(OrderItem).filter(
+        OrderItem.has_issue == True,
+        OrderItem.is_received == True
+    )
+
+    # Filter by property if specified
+    if property_id:
+        query = query.join(Order).filter(Order.property_id == property_id)
+
+    flagged_items = query.order_by(OrderItem.updated_at.desc()).all()
+
+    result = []
+    for item in flagged_items:
+        # Get related order and property info
+        order = db.query(Order).filter(Order.id == item.order_id).first()
+        if not order:
+            continue
+
+        prop = db.query(Property).filter(Property.id == order.property_id).first()
+        property_name = prop.name if prop else "Unknown Property"
+
+        # Get item name
+        if item.inventory_item:
+            item_name = item.inventory_item.name
+        else:
+            item_name = item.custom_item_name or "Unknown Item"
+
+        # Get who created the order (who flagged the item)
+        flagged_by = None
+        if order.created_by_user:
+            flagged_by = order.created_by_user.full_name or order.created_by_user.email
+
+        result.append(FlaggedItemResponse(
+            item_id=item.id,
+            item_name=item_name,
+            order_id=order.id,
+            order_number=order.order_number,
+            property_id=order.property_id,
+            property_name=property_name,
+            received_quantity=item.received_quantity or 0,
+            approved_quantity=item.approved_quantity,
+            has_issue=item.has_issue,
+            issue_description=item.issue_description,
+            issue_photo_url=item.issue_photo_url,
+            receiving_notes=item.receiving_notes,
+            received_at=order.received_at or item.updated_at,
+            flagged_by_name=flagged_by
+        ))
+
+    return FlaggedItemsList(
+        items=result,
+        total_count=len(result)
+    )
+
+
+@router.post("/items/{item_id}/resolve-flag")
+def resolve_flagged_item(
+    item_id: int,
+    current_user: User = Depends(require_purchasing_team),
+    db: Session = Depends(get_db)
+):
+    """
+    Resolve a flagged item by clearing the issue flag.
+    Used by purchasing team to mark flagged items as addressed.
+    """
+    item = db.query(OrderItem).filter(OrderItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Order item not found")
+
+    if not item.has_issue:
+        raise HTTPException(status_code=400, detail="Item is not flagged")
+
+    # Clear the issue flag
+    item.has_issue = False
+    item.issue_description = None
+    db.commit()
+
+    return {"message": "Issue resolved successfully", "item_id": item_id}
+
+
 @router.get("/{order_id}", response_model=OrderWithItems)
 def get_order(
     order_id: int,
@@ -288,15 +396,23 @@ def _build_order_with_items(order: Order, db: Session) -> OrderWithItems:
     for item in order.items:
         item_detail = OrderItemWithDetails.model_validate(item)
 
-        # Get item name
+        # Get item name and inventory data
         if item.inventory_item:
             item_detail.item_name = item.inventory_item.name
+            item_detail.par_level = item.inventory_item.par_level
+            item_detail.current_stock = item.inventory_item.current_stock
         else:
             item_detail.item_name = item.custom_item_name or "Custom Item"
+            item_detail.par_level = None
+            item_detail.current_stock = None
 
-        # Get supplier name
-        if item.supplier:
+        # Get supplier name and ID - try from order item first, then from inventory item
+        if item.supplier_id and item.supplier:
+            item_detail.supplier_id = item.supplier_id
             item_detail.supplier_name = item.supplier.name
+        elif item.inventory_item and item.inventory_item.supplier_id and item.inventory_item.supplier:
+            item_detail.supplier_id = item.inventory_item.supplier_id
+            item_detail.supplier_name = item.inventory_item.supplier.name
 
         # Calculate quantities
         item_detail.final_quantity = item.approved_quantity if item.approved_quantity is not None else item.requested_quantity
@@ -328,8 +444,13 @@ def create_order(
     """Create new order (draft)"""
     require_property_access(order_data.property_id, current_user)
 
+    # Get property to use its code for order number
+    property = db.query(Property).filter(Property.id == order_data.property_id).first()
+    if not property:
+        raise HTTPException(status_code=404, detail="Property not found")
+
     order = Order(
-        order_number=generate_order_number(),
+        order_number=generate_order_number(property.code),
         property_id=order_data.property_id,
         week_of=order_data.week_of,
         notes=order_data.notes,
@@ -509,6 +630,9 @@ def update_order_item(
     notes = item_data.review_notes or item_data.reviewer_notes
     if notes is not None:
         item.reviewer_notes = notes
+    # Allow supervisor to update supplier for any item
+    if item_data.supplier_id is not None:
+        item.supplier_id = item_data.supplier_id
 
     # Mark order as under review if it was just submitted
     if order.status == OrderStatus.SUBMITTED.value:
@@ -552,6 +676,83 @@ def delete_order(
 
     db.delete(order)
     db.commit()
+
+
+@router.delete("/{order_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_order_item(
+    order_id: int,
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete item from draft or changes_requested order"""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    require_property_access(order.property_id, current_user)
+
+    # Allow deletion from draft or changes_requested orders
+    if order.status not in [OrderStatus.DRAFT.value, OrderStatus.CHANGES_REQUESTED.value]:
+        raise HTTPException(status_code=400, detail="Can only edit draft or changes_requested orders")
+
+    # Only creator or admin can delete items
+    if order.created_by != current_user.id and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Can only edit your own orders")
+
+    item = db.query(OrderItem).filter(
+        OrderItem.id == item_id,
+        OrderItem.order_id == order_id
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Order item not found")
+
+    db.delete(item)
+
+    # Recalculate order total
+    order.estimated_total = calculate_order_total(order)
+
+    db.commit()
+
+
+@router.patch("/{order_id}/items/{item_id}", response_model=OrderResponse)
+def update_draft_order_item(
+    order_id: int,
+    item_id: int,
+    quantity: int = Query(..., ge=1),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update item quantity in draft or changes_requested order (for camp worker)"""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    require_property_access(order.property_id, current_user)
+
+    # Allow updates to draft or changes_requested orders
+    if order.status not in [OrderStatus.DRAFT.value, OrderStatus.CHANGES_REQUESTED.value]:
+        raise HTTPException(status_code=400, detail="Can only edit draft or changes_requested orders")
+
+    # Only creator or admin can update items
+    if order.created_by != current_user.id and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Can only edit your own orders")
+
+    item = db.query(OrderItem).filter(
+        OrderItem.id == item_id,
+        OrderItem.order_id == order_id
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Order item not found")
+
+    item.requested_quantity = quantity
+
+    # Recalculate order total
+    order.estimated_total = calculate_order_total(order)
+
+    db.commit()
+    db.refresh(order)
+    return order
 
 
 # ============== ORDER WORKFLOW ==============
@@ -615,7 +816,6 @@ def submit_order(
                 property_name=property_name,
                 submitted_by=submitted_by,
                 item_count=len(order.items),
-                estimated_total=order.estimated_total or 0,
                 week_of=week_of_str
             )
     except Exception as e:
@@ -767,7 +967,6 @@ def resubmit_order(
                 property_name=property_name,
                 submitted_by=submitted_by,
                 item_count=len(order.items),
-                estimated_total=order.estimated_total or 0,
                 week_of=week_of_str
             )
     except Exception as e:
@@ -792,6 +991,28 @@ def mark_order_ordered(
 
     order.status = OrderStatus.ORDERED.value
     order.ordered_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+@router.post("/{order_id}/unmark-ordered", response_model=OrderResponse)
+def unmark_order_ordered(
+    order_id: int,
+    current_user: User = Depends(require_purchasing_team),
+    db: Session = Depends(get_db)
+):
+    """Revert order from ordered back to approved (purchasing team)"""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.status != OrderStatus.ORDERED.value:
+        raise HTTPException(status_code=400, detail="Order is not in ordered status")
+
+    order.status = OrderStatus.APPROVED.value
+    order.ordered_at = None
 
     db.commit()
     db.refresh(order)
@@ -828,6 +1049,7 @@ def receive_order_items(
             item.is_received = True
             item.has_issue = item_req.has_issue
             item.issue_description = item_req.issue_description
+            item.issue_photo_url = item_req.issue_photo_url
             item.receiving_notes = item_req.receiving_notes
 
             # Track flagged items
@@ -896,72 +1118,79 @@ def receive_order_items(
     return order
 
 
-# ============== FLAGGED ITEMS ==============
+# ============== ISSUE PHOTO UPLOAD ==============
 
-@router.get("/flagged-items", response_model=FlaggedItemsList)
-def get_flagged_items(
-    property_id: Optional[int] = None,
-    current_user: User = Depends(require_purchasing_team),
+@router.post("/upload-issue-photo")
+async def upload_issue_photo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Get all items that were flagged with issues during receiving.
-    For purchasing team dashboard to see quality/delivery issues.
-    Example: 'Yukon River Camp flagged Cilantro: "Cilantro was wilted and slimy when it arrived"'
+    Upload a photo for a receiving issue.
+    Returns the URL path to the uploaded file.
     """
-    # Query order items that have issues
-    query = db.query(OrderItem).filter(
-        OrderItem.has_issue == True,
-        OrderItem.is_received == True
-    )
+    # Validate file type
+    filename_lower = file.filename.lower() if file.filename else ""
+    is_heic = any(filename_lower.endswith(ext) for ext in ['.heic', '.heif'])
+    is_standard = any(filename_lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp'])
 
-    # Filter by property if specified
-    if property_id:
-        query = query.join(Order).filter(Order.property_id == property_id)
+    if not is_heic and not is_standard:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPG, PNG, WebP, and HEIC images are supported"
+        )
 
-    flagged_items = query.order_by(OrderItem.updated_at.desc()).all()
+    # Read file content
+    content = await file.read()
 
-    result = []
-    for item in flagged_items:
-        # Get related order and property info
-        order = db.query(Order).filter(Order.id == item.order_id).first()
-        if not order:
-            continue
+    # Convert HEIC to JPEG if needed
+    if is_heic:
+        try:
+            import pillow_heif
+            from PIL import Image
+            import io
 
-        prop = db.query(Property).filter(Property.id == order.property_id).first()
-        property_name = prop.name if prop else "Unknown Property"
+            pillow_heif.register_heif_opener()
+            heif_image = Image.open(io.BytesIO(content))
 
-        # Get item name
-        if item.inventory_item:
-            item_name = item.inventory_item.name
-        else:
-            item_name = item.custom_item_name or "Unknown Item"
+            if heif_image.mode in ('RGBA', 'P'):
+                heif_image = heif_image.convert('RGB')
 
-        # Get who created the order (who flagged the item)
-        flagged_by = None
-        if order.created_by_user:
-            flagged_by = order.created_by_user.full_name or order.created_by_user.email
+            jpeg_buffer = io.BytesIO()
+            heif_image.save(jpeg_buffer, format='JPEG', quality=85)
+            content = jpeg_buffer.getvalue()
+            filename_lower = filename_lower.replace('.heic', '.jpg').replace('.heif', '.jpg')
+        except ImportError:
+            raise HTTPException(
+                status_code=500,
+                detail="HEIC support not available"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to convert HEIC image: {str(e)}"
+            )
 
-        result.append(FlaggedItemResponse(
-            item_id=item.id,
-            item_name=item_name,
-            order_id=order.id,
-            order_number=order.order_number,
-            property_id=order.property_id,
-            property_name=property_name,
-            received_quantity=item.received_quantity or 0,
-            approved_quantity=item.approved_quantity,
-            has_issue=item.has_issue,
-            issue_description=item.issue_description,
-            receiving_notes=item.receiving_notes,
-            received_at=order.received_at or item.updated_at,
-            flagged_by_name=flagged_by
-        ))
+    # File size limit (5MB)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds 5MB limit"
+        )
 
-    return FlaggedItemsList(
-        items=result,
-        total_count=len(result)
-    )
+    # Save image to uploads directory
+    uploads_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads", "issues")
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    file_ext = ".jpg" if is_heic else (os.path.splitext(file.filename)[1] if file.filename else ".jpg")
+    filename = f"{uuid.uuid4().hex}{file_ext}"
+    file_path = os.path.join(uploads_dir, filename)
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    return {"url": f"/uploads/issues/{filename}"}
 
 
 # ============== ORDER SUMMARIES ==============

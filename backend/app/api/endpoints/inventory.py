@@ -33,7 +33,7 @@ def list_inventory_items(
     supplier_id: Optional[int] = None,
     low_stock_only: bool = False,
     skip: int = 0,
-    limit: int = 200,
+    limit: int = 1000,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -68,11 +68,14 @@ def list_inventory_items(
             "name": item.name,
             "description": item.description,
             "category": item.category,
+            "subcategory": item.subcategory,
             "brand": item.brand,
             "supplier_id": item.supplier_id,
             "unit": item.unit,
             "pack_size": item.pack_size,
             "pack_unit": item.pack_unit,
+            "order_unit": item.order_unit,
+            "units_per_order_unit": item.units_per_order_unit,
             "unit_price": item.unit_price,
             "par_level": item.par_level,
             "sort_order": item.sort_order,
@@ -84,7 +87,8 @@ def list_inventory_items(
             "updated_at": item.updated_at,
             "is_low_stock": item.is_low_stock(),
             "suggested_order_qty": item.suggested_order_qty(),
-            "supplier_name": item.supplier.name if item.supplier else None
+            "supplier_name": item.supplier.name if item.supplier else None,
+            "effective_order_unit": item.get_effective_order_unit()
         }
         result.append(InventoryItemWithStatus(**item_dict))
 
@@ -398,12 +402,41 @@ async def analyze_inventory_photos(
         import httpx
         from PIL import Image
         import pillow_heif
+        import fitz  # PyMuPDF for PDF support
 
         # Register HEIF opener with Pillow
         pillow_heif.register_heif_opener()
 
-        # Encode images to base64
-        image_contents = []
+        # Build the prompt
+        system_prompt = """You are an inventory counting assistant. Your task is to analyze a photo of a handwritten or printed inventory count sheet and extract item names with their counted quantities.
+
+The inventory items in this system are:
+{item_list}
+
+Your response MUST be a valid JSON array with the following format:
+[
+  {{"item_id": 123, "item_name": "Item Name", "quantity": 10.5, "confidence": 0.95, "notes": "optional notes about this count"}},
+  ...
+]
+
+CRITICAL INSTRUCTIONS:
+1. PRESERVE DECIMAL/FRACTIONAL COUNTS EXACTLY as written - do NOT round! If someone wrote "1.5", return 1.5. If they wrote ".5" or "0.5", return 0.5.
+2. DO NOT round up or down - report the EXACT number written on the sheet
+3. Look carefully for decimal points - a "." before a number means it's a fraction (e.g., ".5" = 0.5)
+4. Common partial counts: 0.5, 1.5, 2.5, 0.25, 0.75 - these are valid and should be preserved
+5. Match the items to the inventory list provided above. Use the item_id from the list.
+6. If you can't find an exact match, try to find the closest match and note it in the notes field
+7. Include a confidence score (0.0 to 1.0) for each count based on how clearly you can read it
+8. If handwriting is unclear, include a note about what the value might be
+9. Extract EVERY item you can see in the photo - do not skip any items
+10. Return ONLY the JSON array, no other text
+
+IMPORTANT: The quantity field accepts decimals. A count of "1.5" means one and a half units - this is common in inventory. Never interpret ".5" as "5" - that would be a decimal point before the 5."""
+
+        # Collect all image data (bytes, media_type) to process
+        # This allows us to handle PDFs by extracting pages as images
+        image_data_list = []  # List of (bytes, media_type, page_label)
+
         for img in images:
             content = await img.read()
 
@@ -412,18 +445,32 @@ async def analyze_inventory_photos(
             if img.filename:
                 ext = img.filename.lower().split('.')[-1]
 
+            # Handle PDF files - extract each page as an image
+            if ext == 'pdf':
+                try:
+                    pdf_doc = fitz.open(stream=content, filetype="pdf")
+                    for page_num in range(len(pdf_doc)):
+                        page = pdf_doc[page_num]
+                        # Render page at 2x resolution for better quality (150 DPI -> 300 DPI effective)
+                        mat = fitz.Matrix(2.0, 2.0)
+                        pix = page.get_pixmap(matrix=mat)
+                        # Convert to PNG bytes
+                        png_bytes = pix.tobytes("png")
+                        image_data_list.append((png_bytes, "image/png", f"{img.filename} page {page_num + 1}"))
+                    pdf_doc.close()
+                except Exception as pdf_error:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to process PDF '{img.filename}': {str(pdf_error)}"
+                    )
             # Handle HEIC/HEIF conversion to JPEG
-            if ext in ('heic', 'heif'):
-                # Convert HEIC to JPEG
+            elif ext in ('heic', 'heif'):
                 heic_image = Image.open(io.BytesIO(content))
-                # Convert to RGB if necessary (HEIC can have alpha channel)
                 if heic_image.mode in ('RGBA', 'P'):
                     heic_image = heic_image.convert('RGB')
-                # Save as JPEG to bytes
                 jpeg_buffer = io.BytesIO()
                 heic_image.save(jpeg_buffer, format='JPEG', quality=90)
-                content = jpeg_buffer.getvalue()
-                media_type = "image/jpeg"
+                image_data_list.append((jpeg_buffer.getvalue(), "image/jpeg", img.filename))
             else:
                 # Determine media type for other formats
                 media_type = "image/jpeg"
@@ -433,99 +480,115 @@ async def analyze_inventory_photos(
                     media_type = "image/gif"
                 elif ext == 'webp':
                     media_type = "image/webp"
+                image_data_list.append((content, media_type, img.filename))
 
-            b64_content = base64.b64encode(content).decode('utf-8')
+        # Process pages in PARALLEL to avoid timeout
+        all_extracted_counts = []
+        total_pages = len(image_data_list)
 
-            image_contents.append({
+        async def process_single_page(client, img_index, img_bytes, media_type, page_label):
+            """Process a single page and return extracted counts"""
+            b64_content = base64.b64encode(img_bytes).decode('utf-8')
+
+            image_content = {
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:{media_type};base64,{b64_content}",
                     "detail": "high"
                 }
-            })
-
-        # Build the prompt
-        system_prompt = """You are an inventory counting assistant. Your task is to analyze photos of handwritten or printed inventory count sheets and extract item names with their counted quantities.
-
-The inventory items in this system are:
-{item_list}
-
-Your response MUST be a valid JSON array with the following format:
-[
-  {{"item_id": 123, "item_name": "Item Name", "quantity": 10, "confidence": 0.95, "notes": "optional notes about this count"}},
-  ...
-]
-
-Instructions:
-1. Look at each photo carefully and identify item names and their associated counts
-2. Match the items to the inventory list provided above. Use the item_id from the list.
-3. If you can't find an exact match, try to find the closest match and note it in the notes field
-4. Include a confidence score (0.0 to 1.0) for each count based on how clearly you can read it
-5. If handwriting is unclear, include a note about what the value might be
-6. Include ALL items you can identify across ALL photos provided
-7. Return ONLY the JSON array, no other text"""
-
-        messages = [
-            {"role": "system", "content": system_prompt.format(item_list=item_list)},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Please analyze these inventory count sheet photos and extract all item counts. Return only valid JSON."},
-                    *image_contents
-                ]
             }
-        ]
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "gpt-4o",
-                    "messages": messages,
-                    "max_completion_tokens": 4096,
-                    "temperature": 0.1
-                },
-                timeout=120.0
-            )
-
-            if response.status_code != 200:
-                error_detail = response.json() if response.content else "Unknown error"
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"OpenAI API error: {error_detail}"
-                )
-
-            result = response.json()
-            content = result['choices'][0]['message']['content']
-
-            # Try to parse the JSON from the response
-            # Remove markdown code blocks if present
-            content = content.strip()
-            if content.startswith('```json'):
-                content = content[7:]
-            if content.startswith('```'):
-                content = content[3:]
-            if content.endswith('```'):
-                content = content[:-3]
-            content = content.strip()
+            messages = [
+                {"role": "system", "content": system_prompt.format(item_list=item_list)},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Please analyze this inventory count sheet ({page_label}, page {img_index + 1} of {total_pages}) and extract ALL item counts. Return only valid JSON."},
+                        image_content
+                    ]
+                }
+            ]
 
             try:
-                extracted_counts = json.loads(content)
-            except json.JSONDecodeError as e:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to parse AI response as JSON: {str(e)}. Raw response: {content[:500]}"
+                response = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "gpt-4o",
+                        "messages": messages,
+                        "max_completion_tokens": 4096,
+                        "temperature": 0.1
+                    },
+                    timeout=120.0
                 )
 
-            return {
-                "success": True,
-                "extracted_counts": extracted_counts,
-                "images_processed": len(images)
-            }
+                if response.status_code != 200:
+                    print(f"OpenAI API error on {page_label}: {response.status_code}")
+                    return []
+
+                result = response.json()
+                response_content = result['choices'][0]['message']['content']
+
+                # Try to parse the JSON from the response
+                # Remove markdown code blocks if present
+                response_content = response_content.strip()
+                if response_content.startswith('```json'):
+                    response_content = response_content[7:]
+                if response_content.startswith('```'):
+                    response_content = response_content[3:]
+                if response_content.endswith('```'):
+                    response_content = response_content[:-3]
+                response_content = response_content.strip()
+
+                page_counts = json.loads(response_content)
+                if isinstance(page_counts, list):
+                    print(f"Successfully extracted {len(page_counts)} items from {page_label}")
+                    return page_counts
+                return []
+            except json.JSONDecodeError as e:
+                print(f"Failed to parse AI response for {page_label}: {str(e)}")
+                return []
+            except Exception as e:
+                print(f"Error processing {page_label}: {str(e)}")
+                return []
+
+        # Process all pages in parallel
+        import asyncio
+        async with httpx.AsyncClient() as client:
+            tasks = [
+                process_single_page(client, idx, img_bytes, media_type, page_label)
+                for idx, (img_bytes, media_type, page_label) in enumerate(image_data_list)
+            ]
+            results = await asyncio.gather(*tasks)
+            for page_counts in results:
+                all_extracted_counts.extend(page_counts)
+
+        # Merge duplicates: if same item_id appears multiple times, keep the one with higher confidence
+        merged_counts = {}
+        for count in all_extracted_counts:
+            item_id = count.get('item_id')
+            if item_id is None:
+                continue
+            if item_id not in merged_counts:
+                merged_counts[item_id] = count
+            else:
+                # Keep the one with higher confidence
+                existing_confidence = merged_counts[item_id].get('confidence', 0)
+                new_confidence = count.get('confidence', 0)
+                if new_confidence > existing_confidence:
+                    merged_counts[item_id] = count
+
+        extracted_counts = list(merged_counts.values())
+
+        return {
+            "success": True,
+            "extracted_counts": extracted_counts,
+            "images_processed": len(images),
+            "pages_processed": total_pages
+        }
 
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail=f"HTTP error calling OpenAI: {str(e)}")
@@ -535,8 +598,8 @@ Instructions:
 
 # ============== SEED INVENTORY FROM PHOTO (ADMIN ONLY) ==============
 
-VALID_CATEGORIES = ['Dairy', 'Protein', 'Produce', 'Dry Goods', 'Canned/Jarred', 'Beverages', 'Condiments', 'Other']
-VALID_UNITS = ['each', 'lb', 'oz', 'gallon', 'quart', 'pint', 'case', 'box', 'bag', 'dozen', 'bunch', 'head', 'jar', 'can', 'bottle', 'pack', 'roll', 'sheet', 'unit']
+VALID_CATEGORIES = ['Bakery', 'Beverages', 'Cleaning Supplies', 'Condiments', 'Dairy', 'Dry Goods', 'Frozen', 'Packaged Snacks', 'Paper & Plastic Goods', 'Produce', 'Protein', 'Spices', 'Other']
+VALID_UNITS = ['Each', 'Lb', 'Oz', 'Gallon', 'Quart', 'Pint', 'Case', 'Box', 'Bag', 'Dozen', 'Bunch', 'Head', 'Jar', 'Can', 'Bottle', 'Pack', 'Roll', 'Sheet', 'Unit']
 
 @router.post("/seed-from-photo")
 async def seed_inventory_from_photo(
@@ -578,6 +641,32 @@ async def seed_inventory_from_photo(
         # Register HEIF opener with Pillow
         pillow_heif.register_heif_opener()
 
+        # Helper function to convert PDF to images (same as in admin.py)
+        def convert_pdf_to_images(pdf_content: bytes) -> list:
+            """Convert PDF pages to base64-encoded PNG images for OpenAI Vision API"""
+            import fitz  # PyMuPDF
+
+            pdf_images = []
+            pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
+
+            for page_num in range(len(pdf_doc)):
+                page = pdf_doc[page_num]
+                # Render at 2x resolution for better OCR
+                mat = fitz.Matrix(2.0, 2.0)
+                pix = page.get_pixmap(matrix=mat)
+
+                # Convert to PNG bytes
+                img_bytes = pix.tobytes("png")
+                img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+                pdf_images.append(img_base64)
+
+                # Limit to first 10 pages for inventory sheets
+                if page_num >= 9:
+                    break
+
+            pdf_doc.close()
+            return pdf_images
+
         # Encode images to base64
         image_contents = []
         for img in images:
@@ -587,6 +676,25 @@ async def seed_inventory_from_photo(
             ext = ""
             if img.filename:
                 ext = img.filename.lower().split('.')[-1]
+
+            # Handle PDF files - convert pages to images
+            if ext == 'pdf':
+                try:
+                    pdf_page_images = convert_pdf_to_images(content)
+                    for page_b64 in pdf_page_images:
+                        image_contents.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{page_b64}",
+                                "detail": "high"
+                            }
+                        })
+                    continue  # Skip to next file
+                except Exception as pdf_err:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to process PDF file: {str(pdf_err)}"
+                    )
 
             # Handle HEIC/HEIF conversion to JPEG
             if ext in ('heic', 'heif'):
@@ -833,4 +941,343 @@ async def confirm_seed_inventory(
         "created_items": created_items,
         "skipped_count": len(skipped_items),
         "skipped_items": skipped_items
+    }
+
+
+# ============== AI-POWERED INVENTORY SORTING ==============
+
+async def _sort_category_with_ai(items: List[InventoryItem], category: str, subcategory: Optional[str] = None) -> List[int]:
+    """
+    Use AI to sort items within a category/subcategory logically.
+    Returns list of item IDs in the optimal order.
+    """
+    import httpx
+
+    if not settings.OPENAI_API_KEY:
+        # Fallback to alphabetical if no API key
+        return [item.id for item in sorted(items, key=lambda x: x.name.lower())]
+
+    if not items:
+        return []
+
+    # Build list of items for AI
+    item_names = [{"id": item.id, "name": item.name} for item in items]
+
+    category_desc = f"{category}"
+    if subcategory:
+        category_desc = f"{category} > {subcategory}"
+
+    system_prompt = f"""You are an inventory organization assistant. Your task is to sort food/supply inventory items within a category in a logical order that groups similar items together.
+
+Category: {category_desc}
+
+Rules for sorting:
+1. Group similar products together (e.g., all sliced cheeses together, all pies together, all canned goods by type)
+2. Within groups, order alphabetically or by size/type
+3. For beverages: group by type (sodas, juices, water, coffee, etc.)
+4. For dairy: group by type (milk, cheese, butter, yogurt, etc.)
+5. For produce: group by type (fruits together, vegetables together)
+6. For proteins: group by type (beef, chicken, pork, fish, etc.)
+7. For condiments: group by type (sauces, dressings, spreads, etc.)
+8. Think about how a camp cook would want to find items quickly
+
+Return ONLY a JSON array of item IDs in the optimal order, e.g.: [5, 2, 8, 1, 3]
+Do not include any other text or explanation."""
+
+    user_content = f"Please sort these {len(item_names)} inventory items in a logical order:\n\n"
+    user_content += json.dumps(item_names, indent=2)
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-4o",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content}
+                    ],
+                    "max_completion_tokens": 4096,
+                    "temperature": 0.1
+                },
+                timeout=60.0
+            )
+
+            if response.status_code != 200:
+                # Fallback to alphabetical
+                return [item.id for item in sorted(items, key=lambda x: x.name.lower())]
+
+            result = response.json()
+            content = result['choices'][0]['message']['content'].strip()
+
+            # Parse the JSON array
+            if content.startswith('```json'):
+                content = content[7:]
+            if content.startswith('```'):
+                content = content[3:]
+            if content.endswith('```'):
+                content = content[:-3]
+            content = content.strip()
+
+            sorted_ids = json.loads(content)
+
+            # Validate that all IDs are present
+            item_id_set = set(item.id for item in items)
+            if set(sorted_ids) != item_id_set:
+                # AI returned invalid IDs, fallback to alphabetical
+                return [item.id for item in sorted(items, key=lambda x: x.name.lower())]
+
+            return sorted_ids
+
+    except Exception as e:
+        print(f"AI sorting failed: {str(e)}, falling back to alphabetical")
+        return [item.id for item in sorted(items, key=lambda x: x.name.lower())]
+
+
+@router.post("/sort-category")
+async def sort_inventory_category(
+    property_id: int,
+    category: Optional[str] = None,
+    subcategory: Optional[str] = None,
+    force: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    AI-powered sorting for inventory items within a category.
+    Only sorts if there are new items (last_sorted_at = NULL) unless force=True.
+    If no category specified, sorts all categories that have new items.
+    """
+    require_property_access(property_id, current_user)
+
+    # Build query for items
+    query = db.query(InventoryItem).filter(
+        InventoryItem.property_id == property_id,
+        InventoryItem.is_active == True,
+        InventoryItem.is_recurring == True
+    )
+
+    if category:
+        query = query.filter(InventoryItem.category == category)
+    if subcategory:
+        query = query.filter(InventoryItem.subcategory == subcategory)
+
+    all_items = query.all()
+
+    if not all_items:
+        return {"success": True, "message": "No items to sort", "sorted_categories": []}
+
+    # Group items by category and subcategory
+    grouped_items = {}
+    for item in all_items:
+        key = (item.category or "Uncategorized", item.subcategory or "")
+        if key not in grouped_items:
+            grouped_items[key] = []
+        grouped_items[key].append(item)
+
+    sorted_categories = []
+    now = datetime.utcnow()
+
+    for (cat, subcat), items in grouped_items.items():
+        # Check if sorting is needed (any items with last_sorted_at = NULL)
+        needs_sorting = force or any(item.last_sorted_at is None for item in items)
+
+        if not needs_sorting:
+            continue
+
+        # Get AI-sorted order
+        sorted_ids = await _sort_category_with_ai(items, cat, subcat if subcat else None)
+
+        # Update sort_order and last_sorted_at for all items
+        for order, item_id in enumerate(sorted_ids, start=1):
+            item = next((i for i in items if i.id == item_id), None)
+            if item:
+                item.sort_order = order
+                item.last_sorted_at = now
+
+        sorted_categories.append({
+            "category": cat,
+            "subcategory": subcat or None,
+            "items_sorted": len(sorted_ids)
+        })
+
+    db.commit()
+
+    return {
+        "success": True,
+        "sorted_categories": sorted_categories,
+        "total_items_sorted": sum(c["items_sorted"] for c in sorted_categories)
+    }
+
+
+@router.get("/sorting-status")
+def get_sorting_status(
+    property_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Check which categories have unsorted items (need AI sorting).
+    """
+    require_property_access(property_id, current_user)
+
+    # Get all recurring items grouped by category
+    items = db.query(InventoryItem).filter(
+        InventoryItem.property_id == property_id,
+        InventoryItem.is_active == True,
+        InventoryItem.is_recurring == True
+    ).all()
+
+    # Group by category and check for unsorted items
+    categories = {}
+    for item in items:
+        cat_key = item.category or "Uncategorized"
+        if cat_key not in categories:
+            categories[cat_key] = {"total": 0, "unsorted": 0, "subcategories": {}}
+
+        categories[cat_key]["total"] += 1
+        if item.last_sorted_at is None:
+            categories[cat_key]["unsorted"] += 1
+
+        # Track subcategories
+        if item.subcategory:
+            if item.subcategory not in categories[cat_key]["subcategories"]:
+                categories[cat_key]["subcategories"][item.subcategory] = {"total": 0, "unsorted": 0}
+            categories[cat_key]["subcategories"][item.subcategory]["total"] += 1
+            if item.last_sorted_at is None:
+                categories[cat_key]["subcategories"][item.subcategory]["unsorted"] += 1
+
+    result = []
+    for cat, data in categories.items():
+        result.append({
+            "category": cat,
+            "total_items": data["total"],
+            "unsorted_items": data["unsorted"],
+            "needs_sorting": data["unsorted"] > 0,
+            "subcategories": [
+                {
+                    "name": name,
+                    "total_items": subdata["total"],
+                    "unsorted_items": subdata["unsorted"],
+                    "needs_sorting": subdata["unsorted"] > 0
+                }
+                for name, subdata in data["subcategories"].items()
+            ]
+        })
+
+    return {
+        "property_id": property_id,
+        "categories": result,
+        "total_unsorted": sum(c["unsorted_items"] for c in result)
+    }
+
+
+@router.get("/printable-list")
+async def get_printable_list_with_sorting(
+    property_id: int,
+    auto_sort: bool = True,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get printable inventory list with automatic AI sorting for categories with new items.
+    This endpoint checks each category for unsorted items and triggers AI sorting before returning.
+    """
+    require_property_access(property_id, current_user)
+
+    prop = db.query(Property).filter(Property.id == property_id).first()
+    if not prop:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    # Get all recurring items
+    items = db.query(InventoryItem).filter(
+        InventoryItem.property_id == property_id,
+        InventoryItem.is_active == True,
+        InventoryItem.is_recurring == True
+    ).all()
+
+    if not items:
+        return {
+            "property_name": prop.name,
+            "property_code": prop.code,
+            "generated_at": datetime.utcnow(),
+            "items": [],
+            "categories_sorted": []
+        }
+
+    categories_sorted = []
+
+    if auto_sort:
+        # Group items by category/subcategory
+        grouped_items = {}
+        for item in items:
+            key = (item.category or "Uncategorized", item.subcategory or "")
+            if key not in grouped_items:
+                grouped_items[key] = []
+            grouped_items[key].append(item)
+
+        now = datetime.utcnow()
+
+        # Sort each category that has unsorted items
+        for (cat, subcat), category_items in grouped_items.items():
+            needs_sorting = any(item.last_sorted_at is None for item in category_items)
+
+            if needs_sorting:
+                sorted_ids = await _sort_category_with_ai(category_items, cat, subcat if subcat else None)
+
+                for order, item_id in enumerate(sorted_ids, start=1):
+                    item = next((i for i in category_items if i.id == item_id), None)
+                    if item:
+                        item.sort_order = order
+                        item.last_sorted_at = now
+
+                categories_sorted.append({
+                    "category": cat,
+                    "subcategory": subcat or None,
+                    "items_sorted": len(sorted_ids)
+                })
+
+        if categories_sorted:
+            db.commit()
+
+        # ALWAYS re-query items with proper ordering by sort_order
+        items = db.query(InventoryItem).filter(
+            InventoryItem.property_id == property_id,
+            InventoryItem.is_active == True,
+            InventoryItem.is_recurring == True
+        ).order_by(
+            InventoryItem.category,
+            InventoryItem.subcategory,
+            InventoryItem.sort_order,
+            InventoryItem.name
+        ).all()
+    else:
+        items = sorted(items, key=lambda x: (x.category or "", x.subcategory or "", x.sort_order, x.name.lower()))
+
+    # Build printable list
+    printable_items = [
+        {
+            "id": item.id,
+            "name": item.name,
+            "category": item.category,
+            "subcategory": item.subcategory,
+            "unit": item.unit,
+            "par_level": item.par_level,
+            "current_stock": item.current_stock or 0,
+            "sort_order": item.sort_order
+        }
+        for item in items
+    ]
+
+    return {
+        "property_name": prop.name,
+        "property_code": prop.code,
+        "generated_at": datetime.utcnow(),
+        "items": printable_items,
+        "categories_sorted": categories_sorted,
+        "total_items": len(printable_items)
     }

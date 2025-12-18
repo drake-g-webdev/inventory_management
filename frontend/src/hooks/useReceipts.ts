@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { Receipt, CreateReceiptPayload, FinancialDashboard } from '@/types';
+import type { Receipt, CreateReceiptPayload, FinancialDashboard, InventoryItem, ReceiptCodeAlias, MatchReceiptItemRequest } from '@/types';
 
 export function useReceipts(params?: { supplier_id?: number; order_id?: number }) {
   return useQuery({
@@ -32,6 +32,7 @@ export function useCreateReceipt() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-dashboard'] });
     },
   });
 }
@@ -49,6 +50,7 @@ export function useUploadReceipt() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-dashboard'] });
     },
   });
 }
@@ -62,6 +64,7 @@ export function useUpdateReceipt() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-dashboard'] });
     },
   });
 }
@@ -75,6 +78,7 @@ export function useVerifyReceipt() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-dashboard'] });
     },
   });
 }
@@ -87,6 +91,7 @@ export function useDeleteReceipt() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-dashboard'] });
     },
   });
 }
@@ -100,6 +105,25 @@ export function useDeleteReceiptLineItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-dashboard'] });
+    },
+  });
+}
+
+export function useUpdateReceiptLineItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ receiptId, itemIndex, data }: {
+      receiptId: number;
+      itemIndex: number;
+      data: { quantity?: number; unit_price?: number; total_price?: number }
+    }) => {
+      const response = await api.put<Receipt>(`/receipts/${receiptId}/line-items/${itemIndex}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-dashboard'] });
     },
   });
 }
@@ -165,5 +189,48 @@ export function useAddToInventory() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
     },
+  });
+}
+
+// Search inventory items for matching to receipt items
+export function useSearchInventoryForMatching(propertyId: number | null, query: string) {
+  return useQuery({
+    queryKey: ['search-inventory-matching', propertyId, query],
+    queryFn: async () => {
+      const response = await api.get<InventoryItem[]>('/receipts/search-inventory', {
+        params: { property_id: propertyId, q: query }
+      });
+      return response.data;
+    },
+    enabled: !!propertyId && !!query && query.length >= 1,
+  });
+}
+
+// Match a receipt item to an inventory item and save the alias
+export function useMatchReceiptItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: MatchReceiptItemRequest) => {
+      const response = await api.post<ReceiptCodeAlias>('/receipts/match-item', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['receipt-aliases'] });
+      queryClient.invalidateQueries({ queryKey: ['receipts'] });
+    },
+  });
+}
+
+// Get receipt aliases for a property
+export function useReceiptAliases(propertyId: number | null, supplierId?: number) {
+  return useQuery({
+    queryKey: ['receipt-aliases', propertyId, supplierId],
+    queryFn: async () => {
+      const response = await api.get<ReceiptCodeAlias[]>(`/receipts/aliases/${propertyId}`, {
+        params: supplierId ? { supplier_id: supplierId } : {}
+      });
+      return response.data;
+    },
+    enabled: !!propertyId,
   });
 }

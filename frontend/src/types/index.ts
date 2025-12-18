@@ -36,15 +36,67 @@ export interface Supplier {
   updated_at: string | null;
 }
 
+export interface Category {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface Item {
+  id: number;
+  name: string;
+  brand: string | null;
+  category_id: number | null;
+  category_name: string | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  unit: string;
+  unit_price: number | null;
+  price: number | null;
+  quantity_per_unit: number | null;
+  par_level: number | null;
+  current_stock: number | null;
+  sku: string | null;
+  barcode: string | null;
+  description: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface CreateItemPayload {
+  name: string;
+  brand?: string | null;
+  category_id?: number | null;
+  supplier_id?: number | null;
+  unit?: string;
+  unit_price?: number | null;
+  price?: number | null;
+  quantity_per_unit?: number | null;
+  par_level?: number | null;
+  current_stock?: number | null;
+  sku?: string | null;
+  barcode?: string | null;
+  description?: string | null;
+  notes?: string | null;
+}
+
 export interface InventoryItem {
   id: number;
   property_id: number;
   name: string;
   description: string | null;
   category: string | null;
+  subcategory: string | null;
   supplier_id: number | null;
   supplier_name: string | null;
   unit: string;
+  order_unit: string | null;  // Order unit (e.g., "case" when counting by "box")
+  units_per_order_unit: number | null;  // Conversion factor (e.g., 8 boxes per case)
+  effective_order_unit: string | null;  // Order unit or falls back to inventory unit
   par_level: number | null;
   current_stock: number;
   avg_weekly_usage: number | null;
@@ -53,7 +105,7 @@ export interface InventoryItem {
   is_active: boolean;
   is_recurring: boolean;
   is_low_stock: boolean;
-  suggested_order_qty: number;
+  suggested_order_qty: number;  // Now in order units
   created_at: string;
   updated_at: string | null;
 }
@@ -86,7 +138,10 @@ export interface OrderItem {
   notes: string | null;
   reviewer_notes: string | null;
   item_name?: string | null;
+  supplier_id?: number | null;
   supplier_name?: string | null;
+  par_level?: number | null;
+  current_stock?: number | null;
   final_quantity?: number;
   line_total?: number;
   is_received?: boolean;
@@ -159,6 +214,7 @@ export interface ReceiptLineItem {
   total_price?: number;
   total?: number;
   matched_order_item_id?: number | null;
+  matched_order_item_name?: string | null;
   matched_inventory_item_id?: number | null;
 }
 
@@ -232,6 +288,9 @@ export interface FinancialDashboard {
   spending_by_supplier: SupplierSpendingSummary[];
   spending_by_property: PropertySpendingSummary[];
   spending_trend: SpendingByPeriod[];
+  total_spending?: number;
+  avg_receipt_total?: number;
+  receipt_count?: number;
 }
 
 export interface PropertyDashboard {
@@ -290,8 +349,11 @@ export interface CreateInventoryItemPayload {
   name: string;
   description?: string | null;
   category?: string | null;
+  subcategory?: string | null;
   supplier_id?: number | null;
   unit: string;
+  order_unit?: string | null;
+  units_per_order_unit?: number | null;
   par_level?: number | null;
   current_stock?: number;
   unit_price?: number | null;
@@ -338,8 +400,8 @@ export interface CreateReceiptPayload {
 // Role permission helpers
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Administrator',
-  camp_worker: 'Camp Worker',
-  purchasing_supervisor: 'Purchasing Supervisor',
+  camp_worker: 'Camp Team',
+  purchasing_supervisor: 'Purchasing Support',
   purchasing_team: 'Purchasing Team',
 };
 
@@ -355,6 +417,7 @@ export const canViewAllProperties = (role: UserRole): boolean => role !== 'camp_
 export interface SupplierPurchaseItem {
   item_id: number;
   item_name: string;
+  category: string | null;
   quantity: number;
   unit: string;
   unit_price: number | null;
@@ -394,6 +457,7 @@ export interface FlaggedItem {
   approved_quantity: number | null;
   has_issue: boolean;
   issue_description: string | null;
+  issue_photo_url: string | null;
   receiving_notes: string | null;
   received_at: string | null;
   flagged_by_name: string | null;
@@ -411,4 +475,67 @@ export interface ReceiveItemPayload {
   has_issue?: boolean;
   issue_description?: string;
   receiving_notes?: string;
+}
+
+// Receipt Code Alias types
+export interface ReceiptCodeAlias {
+  id: number;
+  inventory_item_id: number;
+  supplier_id: number | null;
+  receipt_code: string;
+  unit_price: number | null;
+  last_seen: string | null;
+  match_count: number;
+  is_active: boolean;
+  created_at: string;
+  item_name?: string | null;
+  supplier_name?: string | null;
+}
+
+export interface MatchReceiptItemRequest {
+  receipt_code: string;
+  inventory_item_id: number;
+  supplier_id?: number | null;
+  unit_price?: number | null;
+  receipt_id?: number | null;
+}
+
+// Purchase Order System
+export interface PurchaseOrderItem {
+  id: number;
+  purchase_order_id: number;
+  item_id: number | null;
+  item_name: string | null;
+  quantity: number;
+  unit_price: number | null;
+  total_price: number | null;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  order_number: string;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  status: string;
+  notes: string | null;
+  total_amount: number | null;
+  created_by: number;
+  created_by_name: string | null;
+  approved_by: number | null;
+  submitted_at: string | null;
+  approved_at: string | null;
+  received_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+  items: PurchaseOrderItem[];
+}
+
+export interface CreatePurchaseOrderPayload {
+  supplier_id: number;
+  notes?: string | null;
+  items: {
+    item_id: number;
+    quantity: number;
+    unit_price?: number | null;
+  }[];
 }

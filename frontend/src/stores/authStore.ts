@@ -17,9 +17,11 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isInitialized: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => void;
   fetchUser: () => Promise<void>;
+  initializeAuth: () => Promise<void>;
   // Role helpers
   hasRole: (role: UserRole) => boolean;
   canManageUsers: () => boolean;
@@ -38,6 +40,29 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      isInitialized: false,
+
+      initializeAuth: async () => {
+        // Check if there's a token in localStorage and fetch user if so
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        console.log('[Auth] Initializing auth, token exists:', !!token);
+
+        if (token) {
+          set({ isLoading: true });
+          try {
+            await get().fetchUser();
+            console.log('[Auth] Auth initialized successfully');
+          } catch (error) {
+            console.log('[Auth] Token invalid or expired, clearing');
+            localStorage.removeItem('token');
+            set({ user: null, token: null, isAuthenticated: false });
+          } finally {
+            set({ isLoading: false, isInitialized: true });
+          }
+        } else {
+          set({ isInitialized: true });
+        }
+      },
 
       login: async (credentials: LoginCredentials) => {
         console.log('[Auth] Login attempt for:', credentials.email);

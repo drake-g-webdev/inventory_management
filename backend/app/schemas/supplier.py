@@ -1,17 +1,24 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
 
 
 class SupplierBase(BaseModel):
     name: str
-    contact_name: str  # Required
-    email: EmailStr  # Required
-    phone: str  # Required
+    contact_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
     address: Optional[str] = None
     website: Optional[str] = None
     account_number: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator('email', mode='before')
+    @classmethod
+    def empty_string_to_none(cls, v):
+        if v == '':
+            return None
+        return v
 
 
 class SupplierCreate(SupplierBase):
@@ -28,6 +35,13 @@ class SupplierUpdate(BaseModel):
     account_number: Optional[str] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @field_validator('email', mode='before')
+    @classmethod
+    def empty_string_to_none(cls, v):
+        if v == '':
+            return None
+        return v
 
 
 class SupplierResponse(BaseModel):

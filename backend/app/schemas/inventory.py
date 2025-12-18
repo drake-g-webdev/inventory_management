@@ -7,13 +7,17 @@ class InventoryItemBase(BaseModel):
     name: str
     description: Optional[str] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     brand: Optional[str] = None
     supplier_id: Optional[int] = None
-    unit: str = "unit"
+    unit: str = "unit"  # Inventory/counting unit
     pack_size: Optional[float] = None
     pack_unit: Optional[str] = None
+    order_unit: Optional[str] = None  # Ordering unit (e.g., "case" when counting by "box")
+    units_per_order_unit: Optional[float] = None  # Conversion factor (e.g., 8 boxes per case)
     unit_price: Optional[float] = None
     par_level: Optional[float] = None
+    current_stock: float = 0.0  # Allow setting initial stock on creation
     sort_order: int = 0
     is_recurring: bool = True  # Whether item appears on inventory printout sheets
 
@@ -26,11 +30,14 @@ class InventoryItemUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     brand: Optional[str] = None
     supplier_id: Optional[int] = None
     unit: Optional[str] = None
     pack_size: Optional[float] = None
     pack_unit: Optional[str] = None
+    order_unit: Optional[str] = None
+    units_per_order_unit: Optional[float] = None
     unit_price: Optional[float] = None
     par_level: Optional[float] = None
     current_stock: Optional[float] = None
@@ -56,8 +63,10 @@ class InventoryItemResponse(InventoryItemBase):
 
 class InventoryItemWithStatus(InventoryItemResponse):
     is_low_stock: bool = False
-    suggested_order_qty: float = 0.0
+    suggested_order_qty: float = 0.0  # In order units
     supplier_name: Optional[str] = None
+    subcategory: Optional[str] = None
+    effective_order_unit: Optional[str] = None  # Order unit or falls back to inventory unit
 
 
 # Inventory Count schemas

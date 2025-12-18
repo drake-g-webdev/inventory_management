@@ -182,23 +182,20 @@ export default function SuppliersPage() {
                 required
               />
               <Input
-                label="Contact Name *"
+                label="Contact Name"
                 value={formData.contact_name}
                 onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
-                required
               />
               <Input
-                label="Email *"
+                label="Email"
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
               />
               <Input
-                label="Phone *"
+                label="Phone"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                required
               />
             </div>
             <Input

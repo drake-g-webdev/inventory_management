@@ -114,6 +114,7 @@ class OrderItem(Base):
     is_received = Column(Boolean, default=False)
     has_issue = Column(Boolean, default=False)  # Quality issue, missing, etc.
     issue_description = Column(Text, nullable=True)
+    issue_photo_url = Column(String(500), nullable=True)  # Photo of issue
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

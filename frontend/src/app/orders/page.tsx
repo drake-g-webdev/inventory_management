@@ -2,13 +2,12 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Plus, Eye, Edit2, Send, Package, PackageCheck } from 'lucide-react';
+import { Plus, Eye, Edit2, Send, Package } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { useMyOrders, useSubmitOrder, useOrder } from '@/hooks/useOrders';
-import { formatCurrency } from '@/lib/utils';
 import type { Order, OrderStatus } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -48,23 +47,15 @@ export default function MyOrdersPage() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">My Orders</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
               <p className="text-gray-500 mt-1">Manage your weekly orders</p>
             </div>
-            <div className="flex gap-3">
-              <Link href="/orders/receive">
-                <Button variant="outline">
-                  <PackageCheck className="h-4 w-4 mr-2" />
-                  Receive Orders
-                </Button>
-              </Link>
-              <Link href="/orders/new">
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Order
-                </Button>
-              </Link>
-            </div>
+            <Link href="/orders/new">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                New Order
+              </Button>
+            </Link>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -84,7 +75,6 @@ export default function MyOrdersPage() {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week Of</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Est. Value</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -100,9 +90,6 @@ export default function MyOrdersPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {order.item_count ?? order.items?.length ?? 0} items
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {order.estimated_total ? formatCurrency(order.estimated_total) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[order.status]}`}>

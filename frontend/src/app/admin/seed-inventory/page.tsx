@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Upload, X, Check, AlertTriangle, Loader2, Trash2, Edit2 } from 'lucide-react';
+import { Upload, X, Check, AlertTriangle, Loader2, Trash2, Edit2, FileText } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
@@ -9,8 +9,8 @@ import { useProperties } from '@/hooks/useProperties';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 
-const CATEGORIES = ['Dairy', 'Protein', 'Produce', 'Dry Goods', 'Canned/Jarred', 'Beverages', 'Condiments', 'Other'];
-const UNITS = ['each', 'lb', 'oz', 'gallon', 'quart', 'pint', 'case', 'box', 'bag', 'dozen', 'bunch', 'head', 'jar', 'can', 'bottle', 'pack', 'roll', 'sheet', 'unit'];
+const CATEGORIES = ['Bakery', 'Beverages', 'Cleaning Supplies', 'Condiments', 'Dairy', 'Dry Goods', 'Frozen', 'Packaged Snacks', 'Paper & Plastic Goods', 'Produce', 'Protein', 'Spices', 'Other'];
+const UNITS = ['Each', 'Lb', 'Oz', 'Gallon', 'Quart', 'Pint', 'Case', 'Box', 'Bag', 'Dozen', 'Bunch', 'Head', 'Jar', 'Can', 'Bottle', 'Pack', 'Roll', 'Sheet', 'Unit'];
 
 interface ExtractedItem {
   name: string;
@@ -51,11 +51,16 @@ export default function SeedInventoryPage() {
 
     // Generate previews for new files
     selectedFiles.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPreviews(prev => [...prev, e.target?.result as string]);
-      };
-      reader.readAsDataURL(file);
+      // For PDFs, use a placeholder instead of trying to read as image
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        setPreviews(prev => [...prev, `PDF:${file.name}`]);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPreviews(prev => [...prev, e.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      }
     });
 
     // Reset the input
@@ -71,7 +76,7 @@ export default function SeedInventoryPage() {
 
   const handleAnalyze = async () => {
     if (!selectedPropertyId || files.length === 0) {
-      toast.error('Please select a camp and upload at least one image');
+      toast.error('Please select a camp and upload at least one file');
       return;
     }
 
@@ -160,7 +165,7 @@ export default function SeedInventoryPage() {
         <div className="space-y-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Seed Inventory</h1>
-            <p className="text-gray-500 mt-1">Upload inventory sheet photos to automatically extract and add items to a camp's inventory</p>
+            <p className="text-gray-500 mt-1">Upload inventory sheet photos or PDFs to automatically extract and add items to a camp's inventory</p>
           </div>
 
           {/* Step 1: Select Camp */}
@@ -184,12 +189,12 @@ export default function SeedInventoryPage() {
             </select>
           </div>
 
-          {/* Step 2: Upload Photos */}
+          {/* Step 2: Upload Photos or PDF */}
           {selectedPropertyId && !extractResult && (
             <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold mb-4">2. Upload Inventory Sheet Photos</h2>
+              <h2 className="text-lg font-semibold mb-4">2. Upload Inventory Sheets</h2>
               <p className="text-sm text-gray-500 mb-4">
-                Upload one or more photos of inventory sheets. The AI will extract item names and try to categorize them.
+                Upload photos or PDF files of inventory sheets. The AI will extract item names and try to categorize them.
                 Duplicate items (already in the inventory) will be automatically skipped.
               </p>
 
@@ -197,7 +202,7 @@ export default function SeedInventoryPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.pdf,application/pdf"
                 multiple
                 onChange={handleFileSelect}
                 className="hidden"
@@ -210,21 +215,32 @@ export default function SeedInventoryPage() {
               >
                 <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">Click to upload or drag and drop</p>
-                <p className="text-sm text-gray-500 mt-1">PNG, JPG, HEIC supported</p>
+                <p className="text-sm text-gray-500 mt-1">PNG, JPG, HEIC, PDF supported</p>
               </div>
 
-              {/* Preview images */}
+              {/* Preview files */}
               {previews.length > 0 && (
                 <div className="mt-6">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Uploaded Images ({previews.length})</h3>
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Uploaded Files ({previews.length})</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {previews.map((preview, index) => (
                       <div key={index} className="relative group">
-                        <img
-                          src={preview}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-32 object-cover rounded-lg border"
-                        />
+                        {preview.startsWith('PDF:') ? (
+                          // PDF file display
+                          <div className="w-full h-32 rounded-lg border bg-gray-50 flex flex-col items-center justify-center p-2">
+                            <FileText className="h-10 w-10 text-red-500 mb-2" />
+                            <p className="text-xs text-gray-600 text-center truncate w-full px-2">
+                              {preview.replace('PDF:', '')}
+                            </p>
+                          </div>
+                        ) : (
+                          // Image file display
+                          <img
+                            src={preview}
+                            alt={`Preview ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg border"
+                          />
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -256,7 +272,7 @@ export default function SeedInventoryPage() {
                     ) : (
                       <>
                         <Check className="h-4 w-4 mr-2" />
-                        Analyze Photos
+                        Analyze Files
                       </>
                     )}
                   </Button>

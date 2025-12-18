@@ -19,7 +19,15 @@ export default function LoginPage() {
     try {
       await login({ email, password });
       toast.success('Login successful!');
-      router.push('/dashboard');
+      // Redirect based on role
+      const user = useAuthStore.getState().user;
+      if (user?.role === 'camp_worker') {
+        router.push('/inventory');
+      } else if (user?.role === 'purchasing_team') {
+        router.push('/orders/all');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Login failed');
     }

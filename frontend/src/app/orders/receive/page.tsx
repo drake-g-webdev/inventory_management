@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { Package, CheckCircle, AlertTriangle, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Package, CheckCircle, AlertTriangle, ChevronRight, ArrowLeft, Camera, X, Image as ImageIcon } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import { useMyOrders, useReceiveOrderItems, useOrder } from '@/hooks/useOrders';
+import { useMyOrders, useReceiveOrderItems, useOrder, useUploadIssuePhoto } from '@/hooks/useOrders';
 import { formatCurrency } from '@/lib/utils';
 import type { Order, OrderItem, ReceiveItemPayload } from '@/types';
 import toast from 'react-hot-toast';
@@ -22,6 +22,7 @@ interface ReceivingItemState {
   received_quantity: number;
   has_issue: boolean;
   issue_description: string;
+  issue_photo_url: string;
   receiving_notes: string;
 }
 
@@ -49,6 +50,7 @@ export default function ReceiveOrdersPage() {
           received_quantity: item.approved_quantity ?? item.requested_quantity,
           has_issue: false,
           issue_description: '',
+          issue_photo_url: '',
           receiving_notes: '',
         };
       }
@@ -75,15 +77,15 @@ export default function ReceiveOrdersPage() {
     } else {
       setReceivingItems(prev => ({
         ...prev,
-        [itemId]: { ...prev[itemId], has_issue: false, issue_description: '' }
+        [itemId]: { ...prev[itemId], has_issue: false, issue_description: '', issue_photo_url: '' }
       }));
     }
   };
 
-  const handleSaveIssue = (itemId: number, description: string) => {
+  const handleSaveIssue = (itemId: number, description: string, photoUrl: string) => {
     setReceivingItems(prev => ({
       ...prev,
-      [itemId]: { ...prev[itemId], has_issue: true, issue_description: description }
+      [itemId]: { ...prev[itemId], has_issue: true, issue_description: description, issue_photo_url: photoUrl }
     }));
     setShowFlagModal(null);
   };
@@ -108,6 +110,7 @@ export default function ReceiveOrdersPage() {
           received_quantity: item.received_quantity,
           has_issue: item.has_issue,
           issue_description: item.issue_description || undefined,
+          issue_photo_url: item.issue_photo_url || undefined,
           receiving_notes: item.receiving_notes || undefined,
         }))
       });
@@ -185,7 +188,7 @@ export default function ReceiveOrdersPage() {
                               <span>Week of {new Date(order.week_of).toLocaleDateString()}</span>
                               <span className="mx-2">|</span>
                               <span>{receivedCount} of {totalCount} items received</span>
-                              {order.estimated_total && (
+                              {!!order.estimated_total && (
                                 <>
                                   <span className="mx-2">|</span>
                                   <span>{formatCurrency(order.estimated_total)}</span>
@@ -313,13 +316,22 @@ export default function ReceiveOrdersPage() {
                           {state?.has_issue && state.issue_description && (
                             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
                               <div className="flex items-start justify-between">
-                                <div>
+                                <div className="flex-1">
                                   <span className="text-sm font-medium text-amber-800">Issue Description:</span>
                                   <p className="text-sm text-amber-700 mt-1">{state.issue_description}</p>
+                                  {state.issue_photo_url && (
+                                    <div className="mt-2">
+                                      <img
+                                        src={`${process.env.NEXT_PUBLIC_API_URL}${state.issue_photo_url}`}
+                                        alt="Issue photo"
+                                        className="max-w-[200px] max-h-[150px] rounded-lg border border-amber-300"
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                                 <button
                                   onClick={() => setShowFlagModal(item.id)}
-                                  className="text-xs text-amber-600 hover:text-amber-800"
+                                  className="text-xs text-amber-600 hover:text-amber-800 ml-2"
                                 >
                                   Edit
                                 </button>
@@ -342,7 +354,7 @@ export default function ReceiveOrdersPage() {
                       onClick={handleReceiveItems}
                       disabled={receiveItems.isPending || Object.keys(receivingItems).length === 0}
                     >
-                      {receiveItems.isPending ? 'Saving...' : 'Confirm Receipt'}
+                      {receiveItems.isPending ? 'Saving...' : 'Receive Items'}
                     </Button>
                   </div>
                 </div>
@@ -361,7 +373,8 @@ export default function ReceiveOrdersPage() {
             <FlagIssueForm
               itemName={selectedOrder?.items?.find(i => i.id === showFlagModal)?.item_name || 'Item'}
               initialDescription={receivingItems[showFlagModal]?.issue_description || ''}
-              onSave={(description) => handleSaveIssue(showFlagModal, description)}
+              initialPhotoUrl={receivingItems[showFlagModal]?.issue_photo_url || ''}
+              onSave={(description, photoUrl) => handleSaveIssue(showFlagModal, description, photoUrl)}
               onCancel={() => setShowFlagModal(null)}
             />
           )}
@@ -374,15 +387,22 @@ export default function ReceiveOrdersPage() {
 function FlagIssueForm({
   itemName,
   initialDescription,
+  initialPhotoUrl,
   onSave,
   onCancel,
 }: {
   itemName: string;
   initialDescription: string;
-  onSave: (description: string) => void;
+  initialPhotoUrl: string;
+  onSave: (description: string, photoUrl: string) => void;
   onCancel: () => void;
 }) {
   const [description, setDescription] = useState(initialDescription);
+  const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(initialPhotoUrl || null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadIssuePhoto = useUploadIssuePhoto();
 
   const quickIssues = [
     'Item was wilted/spoiled',
@@ -392,6 +412,45 @@ function FlagIssueForm({
     'Quality below standard',
     'Item was expired',
   ];
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPhotoPreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload file
+    setIsUploading(true);
+    try {
+      const result = await uploadIssuePhoto.mutateAsync(file);
+      setPhotoUrl(result.url);
+      toast.success('Photo uploaded');
+    } catch (error: any) {
+      const detail = error.response?.data?.detail;
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail) && detail[0]?.msg
+          ? detail[0].msg
+          : 'Failed to upload photo';
+      toast.error(message);
+      setPhotoPreview(null);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoUrl('');
+    setPhotoPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -419,11 +478,71 @@ function FlagIssueForm({
         className="w-full px-3 py-2 border border-gray-300 rounded-lg h-32"
       />
 
+      {/* Photo Upload Section */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          Add Photo (Optional)
+        </label>
+
+        {photoPreview ? (
+          <div className="relative inline-block">
+            <img
+              src={photoPreview.startsWith('data:') ? photoPreview : `${process.env.NEXT_PUBLIC_API_URL}${photoPreview}`}
+              alt="Issue photo"
+              className="max-w-xs max-h-48 rounded-lg border border-gray-300"
+            />
+            <button
+              onClick={handleRemovePhoto}
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+              onChange={handleFileChange}
+              className="hidden"
+              id="issue-photo-input"
+            />
+            <label
+              htmlFor="issue-photo-input"
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
+                isUploading
+                  ? 'border-gray-300 bg-gray-50 cursor-wait'
+                  : 'border-gray-300 hover:border-primary-400 hover:bg-primary-50'
+              }`}
+            >
+              {isUploading ? (
+                <>
+                  <div className="animate-spin h-5 w-5 border-2 border-primary-600 border-t-transparent rounded-full" />
+                  <span className="text-gray-600">Uploading...</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="h-5 w-5 text-gray-500" />
+                  <span className="text-gray-600">Take Photo or Choose File</span>
+                </>
+              )}
+            </label>
+          </div>
+        )}
+        <p className="text-xs text-gray-500">
+          Supports JPG, PNG, WebP, and HEIC (iPhone photos). Max 5MB.
+        </p>
+      </div>
+
       <div className="flex justify-end gap-3">
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button onClick={() => onSave(description)} disabled={!description.trim()}>
+        <Button
+          onClick={() => onSave(description, photoUrl)}
+          disabled={!description.trim() || isUploading}
+        >
           Save Issue
         </Button>
       </div>

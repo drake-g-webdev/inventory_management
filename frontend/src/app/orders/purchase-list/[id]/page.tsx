@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Truck, Package, Mail, Phone, Building2, ChevronDown, ChevronUp, FileDown } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { Truck, Package, Mail, Phone, ChevronDown, ChevronUp, FileDown, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
-import Badge from '@/components/ui/Badge';
-import { useSupplierPurchaseList } from '@/hooks/useOrders';
+import Button from '@/components/ui/Button';
+import { useSupplierPurchaseList, useOrder } from '@/hooks/useOrders';
 import { formatCurrency } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import type { SupplierPurchaseGroup } from '@/types';
@@ -67,8 +69,6 @@ function SupplierCard({ supplier, defaultExpanded = false, showPricing = true }:
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order #</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
                 {showPricing && (
                   <>
@@ -86,15 +86,6 @@ function SupplierCard({ supplier, defaultExpanded = false, showPricing = true }:
                       <Package className="h-4 w-4 text-gray-400 mr-2" />
                       <span className="font-medium text-gray-900">{item.item_name}</span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center text-sm text-gray-500">
-                      <Building2 className="h-4 w-4 mr-1" />
-                      {item.property_name}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {item.order_number}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                     {item.quantity} {item.unit}
@@ -115,7 +106,7 @@ function SupplierCard({ supplier, defaultExpanded = false, showPricing = true }:
             {showPricing && (
               <tfoot className="bg-gray-50">
                 <tr>
-                  <td colSpan={5} className="px-6 py-3 text-right text-sm font-medium text-gray-900">
+                  <td colSpan={3} className="px-6 py-3 text-right text-sm font-medium text-gray-900">
                     Supplier Total:
                   </td>
                   <td className="px-6 py-3 text-right text-sm font-bold text-gray-900">
@@ -131,15 +122,20 @@ function SupplierCard({ supplier, defaultExpanded = false, showPricing = true }:
   );
 }
 
-export default function PurchaseListPage() {
-  const { data: purchaseList, isLoading, error } = useSupplierPurchaseList();
+export default function OrderPurchaseListPage() {
+  const params = useParams();
+  const router = useRouter();
+  const orderId = Number(params.id);
+
+  const { data: order, isLoading: orderLoading } = useOrder(orderId);
+  const { data: purchaseList, isLoading, error } = useSupplierPurchaseList([orderId]);
   const { user } = useAuthStore();
 
   // Only show pricing for purchasing supervisors, not purchasing team
   const showPricing = user?.role !== 'purchasing_team';
 
   const handleExportPDF = () => {
-    if (!purchaseList || purchaseList.suppliers.length === 0) return;
+    if (!purchaseList || purchaseList.suppliers.length === 0 || !order) return;
 
     const today = new Date().toLocaleDateString();
     const printWindow = window.open('', '_blank');
@@ -147,12 +143,8 @@ export default function PurchaseListPage() {
       return;
     }
 
-    const formatCurrencyForPdf = (amount: number) => {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-    };
-
     // Group items by category within a supplier
-    const groupItemsByCategory = (items: typeof supplier.items) => {
+    const groupItemsByCategory = (items: typeof purchaseList.suppliers[0]['items']) => {
       const grouped: Record<string, typeof items> = {};
       items.forEach(item => {
         const category = item.category || 'Other';
@@ -203,7 +195,7 @@ export default function PurchaseListPage() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Purchase List by Supplier - ${today}</title>
+        <title>Purchase List - ${order.property_name} - ${new Date(order.week_of).toLocaleDateString()}</title>
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
@@ -295,19 +287,15 @@ export default function PurchaseListPage() {
       </head>
       <body>
         <div class="header">
-          <h1>Purchase List by Supplier</h1>
-          <p class="property-name">${purchaseList.suppliers[0]?.items[0]?.property_name || 'All Properties'}</p>
-          <p>Generated: ${today} | ${purchaseList.total_orders} Orders | ${purchaseList.suppliers.length} Suppliers</p>
+          <h1>Purchase List</h1>
+          <p class="property-name">${order.property_name}</p>
+          <p>Week of: ${new Date(order.week_of).toLocaleDateString()} | Generated: ${today}</p>
         </div>
 
         <div class="summary">
           <div class="summary-item">
             <div class="label">Suppliers</div>
             <div class="value">${purchaseList.suppliers.length}</div>
-          </div>
-          <div class="summary-item">
-            <div class="label">Orders</div>
-            <div class="value">${purchaseList.total_orders}</div>
           </div>
           <div class="summary-item">
             <div class="label">Total Items</div>
@@ -332,6 +320,34 @@ export default function PurchaseListPage() {
     printWindow.document.close();
   };
 
+  if (orderLoading || isLoading) {
+    return (
+      <RoleGuard allowedRoles={['purchasing_supervisor', 'purchasing_team']}>
+        <DashboardLayout>
+          <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+            <div className="animate-spin h-8 w-8 border-4 border-primary-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-500">Loading purchase list...</p>
+          </div>
+        </DashboardLayout>
+      </RoleGuard>
+    );
+  }
+
+  if (!order) {
+    return (
+      <RoleGuard allowedRoles={['purchasing_supervisor', 'purchasing_team']}>
+        <DashboardLayout>
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+            <p className="text-red-600">Order not found</p>
+            <Link href="/orders/all" className="text-primary-600 hover:underline mt-2 inline-block">
+              Back to All Orders
+            </Link>
+          </div>
+        </DashboardLayout>
+      </RoleGuard>
+    );
+  }
+
   return (
     <RoleGuard allowedRoles={['purchasing_supervisor', 'purchasing_team']}>
       <DashboardLayout>
@@ -339,8 +355,16 @@ export default function PurchaseListPage() {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Purchase List by Supplier</h1>
-              <p className="text-gray-500 mt-1">Items from approved orders grouped by supplier</p>
+              <div className="flex items-center gap-3 mb-2">
+                <Link href="/orders/all" className="text-gray-500 hover:text-gray-700">
+                  <ArrowLeft className="h-5 w-5" />
+                </Link>
+                <h1 className="text-2xl font-bold text-gray-900">Purchase List</h1>
+              </div>
+              <p className="text-gray-500">
+                <span className="font-medium text-gray-500">{order.property_name}</span>
+                {' '}&mdash; Week of {new Date(order.week_of).toLocaleDateString()}
+              </p>
             </div>
             <div className="flex gap-2 print:hidden">
               <button
@@ -362,8 +386,10 @@ export default function PurchaseListPage() {
                 <p className="text-3xl font-bold text-gray-900">{purchaseList.suppliers.length}</p>
               </div>
               <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-sm text-gray-500">Approved Orders</p>
-                <p className="text-3xl font-bold text-gray-900">{purchaseList.total_orders}</p>
+                <p className="text-sm text-gray-500">Total Items</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {purchaseList.suppliers.reduce((sum, s) => sum + s.total_items, 0)}
+                </p>
               </div>
               {showPricing && (
                 <div className="bg-white rounded-xl shadow-sm p-6">
@@ -375,20 +401,14 @@ export default function PurchaseListPage() {
           )}
 
           {/* Supplier List */}
-          {isLoading ? (
-            <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-              <div className="animate-spin h-8 w-8 border-4 border-primary-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-              <p className="text-gray-500">Loading purchase list...</p>
-            </div>
-          ) : error ? (
+          {error ? (
             <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
               <p className="text-red-600">Failed to load purchase list</p>
             </div>
           ) : purchaseList?.suppliers.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm p-8 text-center">
               <Truck className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No approved orders to purchase</p>
-              <p className="text-sm text-gray-400 mt-1">Approve orders to see them here</p>
+              <p className="text-gray-500">No items to purchase for this order</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -410,7 +430,7 @@ export default function PurchaseListPage() {
                 <div>
                   <p className="text-sm text-primary-600">Grand Total - All Suppliers</p>
                   <p className="text-sm text-primary-500">
-                    {purchaseList.total_orders} orders across {purchaseList.suppliers.length} suppliers
+                    {purchaseList.suppliers.length} suppliers
                   </p>
                 </div>
                 <p className="text-3xl font-bold text-primary-700">{formatCurrency(purchaseList.grand_total)}</p>

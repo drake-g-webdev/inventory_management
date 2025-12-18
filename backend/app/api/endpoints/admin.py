@@ -70,9 +70,9 @@ class SeedOrderResponse(BaseModel):
 
 # ============== HELPER FUNCTIONS ==============
 
-def generate_order_number() -> str:
-    """Generate unique order number"""
-    return f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+def generate_order_number(property_code: str) -> str:
+    """Generate order number with property code and date (e.g., YRC-20251215)"""
+    return f"{property_code}-{datetime.utcnow().strftime('%Y%m%d')}"
 
 
 def normalize_item_name(name: str) -> str:
@@ -373,7 +373,7 @@ DO NOT include notes or descriptions for items - just standardize the name itsel
             text_content = extract_text_from_docx(content)
 
             response = client.chat.completions.create(
-                model="gpt-5.2",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {
@@ -381,7 +381,7 @@ DO NOT include notes or descriptions for items - just standardize the name itsel
                         "content": f"Please extract all purchase order items from this document text. Return the data as JSON.\n\nDocument content:\n{text_content}"
                     }
                 ],
-                max_tokens=4096,
+                max_completion_tokens=4096,
                 response_format={"type": "json_object"}
             )
         else:
@@ -411,7 +411,7 @@ DO NOT include notes or descriptions for items - just standardize the name itsel
                 })
 
             response = client.chat.completions.create(
-                model="gpt-5.2",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {
@@ -419,7 +419,7 @@ DO NOT include notes or descriptions for items - just standardize the name itsel
                         "content": content_parts
                     }
                 ],
-                max_tokens=4096,
+                max_completion_tokens=4096,
                 response_format={"type": "json_object"}
             )
 
@@ -541,7 +541,7 @@ def seed_historical_order(
 
     # Create the order
     order = Order(
-        order_number=generate_order_number(),
+        order_number=generate_order_number(property.code),
         property_id=request.property_id,
         week_of=order_date,
         notes=request.notes or f"Historical order seeded on {datetime.utcnow().strftime('%Y-%m-%d')}",

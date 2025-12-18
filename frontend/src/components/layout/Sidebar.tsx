@@ -12,10 +12,7 @@ import {
   Building2,
   Receipt,
   ClipboardCheck,
-  Calculator,
-  ShoppingCart,
-  Upload,
-  PackageCheck,
+  CheckCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -29,26 +26,24 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'camp_worker', 'purchasing_supervisor', 'purchasing_team'] },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'purchasing_supervisor'] },
   // Admin only
   { name: 'Users', href: '/admin/users', icon: Users, roles: ['admin'] },
   { name: 'Properties', href: '/admin/properties', icon: Building2, roles: ['admin'] },
-  { name: 'Seed Orders', href: '/admin/seed-orders', icon: Upload, roles: ['admin'] },
+  { name: 'Receipts', href: '/admin/receipts', icon: Receipt, roles: ['admin'] },
   { name: 'Seed Inventory', href: '/admin/seed-inventory', icon: Package, roles: ['admin'] },
   // Camp Worker
   { name: 'Inventory', href: '/inventory', icon: Package, roles: ['camp_worker'] },
-  { name: 'Inventory Count', href: '/inventory/count', icon: Calculator, roles: ['camp_worker'] },
-  { name: 'My Orders', href: '/orders', icon: ClipboardList, roles: ['camp_worker'] },
-  { name: 'Receive Orders', href: '/orders/receive', icon: PackageCheck, roles: ['camp_worker'] },
-  // Purchasing Supervisor
+  { name: 'Orders', href: '/orders', icon: ClipboardList, roles: ['camp_worker'] },
+  { name: 'Receive Orders', href: '/orders/receive', icon: CheckCircle, roles: ['camp_worker'] },
+  // Purchasing Support
   { name: 'Camp Inventory', href: '/inventory/view', icon: Package, roles: ['purchasing_supervisor'] },
   { name: 'Review Orders', href: '/orders/review', icon: ClipboardCheck, roles: ['purchasing_supervisor'] },
   { name: 'All Orders', href: '/orders/all', icon: ClipboardList, roles: ['purchasing_supervisor', 'purchasing_team'] },
-  { name: 'Purchase List', href: '/orders/purchase-list', icon: ShoppingCart, roles: ['purchasing_supervisor', 'purchasing_team'] },
-  // Purchasing Team
-  { name: 'Receipts', href: '/receipts', icon: Receipt, roles: ['purchasing_team', 'purchasing_supervisor'] },
+  // Purchasing Supervisor only
+  { name: 'Receipts', href: '/receipts', icon: Receipt, roles: ['purchasing_supervisor'] },
   // Shared
-  { name: 'Suppliers', href: '/suppliers', icon: Truck, roles: ['purchasing_supervisor', 'purchasing_team', 'admin'] },
+  { name: 'Suppliers', href: '/suppliers', icon: Truck, roles: ['purchasing_supervisor', 'admin'] },
 ];
 
 export default function Sidebar() {
@@ -63,13 +58,22 @@ export default function Sidebar() {
     <div className="flex flex-col h-full w-64 bg-gray-900">
       {/* Logo */}
       <div className="flex items-center h-16 px-6 bg-gray-800">
-        <span className="text-xl font-bold text-white">SUKAKPAK</span>
+        <span className="text-xl font-bold text-white">SUKAKPAK Purchasing</span>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
         {filteredNavigation.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+          // For exact matches or sub-routes, but exclude parent routes that are prefixes of other nav items
+          const isExactMatch = pathname === item.href;
+          const isSubRoute = pathname.startsWith(item.href + '/');
+          // Check if any other nav item has this item's href as a prefix (e.g., /orders vs /orders/receive)
+          const hasMoreSpecificMatch = filteredNavigation.some(
+            other => other.href !== item.href &&
+                     other.href.startsWith(item.href + '/') &&
+                     (pathname === other.href || pathname.startsWith(other.href + '/'))
+          );
+          const isActive = isExactMatch || (isSubRoute && !hasMoreSpecificMatch);
           return (
             <Link
               key={item.name}

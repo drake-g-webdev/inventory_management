@@ -19,6 +19,10 @@ class Supplier(Base):
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
 
+    # Supplier-specific receipt parsing instructions
+    # Custom prompt to help AI understand this supplier's receipt format
+    receipt_parsing_prompt = Column(Text, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -26,3 +30,4 @@ class Supplier(Base):
     inventory_items = relationship("InventoryItem", back_populates="supplier")
     order_items = relationship("OrderItem", back_populates="supplier")
     receipts = relationship("Receipt", back_populates="supplier")
+    receipt_aliases = relationship("ReceiptCodeAlias", back_populates="supplier")

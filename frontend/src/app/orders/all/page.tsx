@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Eye, Building2, Send, Package, AlertTriangle } from 'lucide-react';
+import { Eye, Building2, Send, Package, AlertTriangle, ShoppingCart, Undo2 } from 'lucide-react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import { useOrders, useOrder, useMarkOrderOrdered, useReceiveOrderItems } from '@/hooks/useOrders';
+import { useOrders, useOrder, useMarkOrderOrdered, useUnmarkOrderOrdered, useReceiveOrderItems, useFlaggedItems } from '@/hooks/useOrders';
 import { useProperties } from '@/hooks/useProperties';
+import { useAuthStore } from '@/stores/authStore';
 import { formatCurrency } from '@/lib/utils';
 import type { Order, OrderStatus } from '@/types';
 import toast from 'react-hot-toast';
@@ -25,16 +26,31 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   cancelled: 'bg-gray-100 text-gray-600',
 };
 
+// Statuses that purchasing_team can see (only after ordered)
+const PURCHASING_TEAM_STATUSES: OrderStatus[] = ['ordered', 'partially_received', 'received'];
+
 export default function AllOrdersPage() {
+  const { user } = useAuthStore();
+  const isPurchasingTeam = user?.role === 'purchasing_team';
+
   const { data: properties = [] } = useProperties();
   const [statusFilter, setStatusFilter] = useState<OrderStatus | ''>('');
   const [propertyFilter, setPropertyFilter] = useState<string>('');
-  const { data: orders = [], isLoading } = useOrders({
+  const { data: allOrders = [], isLoading } = useOrders({
     status: statusFilter || undefined,
     property_id: propertyFilter ? parseInt(propertyFilter) : undefined,
   });
+
+  // Filter orders for purchasing_team to only show ordered+ statuses
+  const orders = isPurchasingTeam
+    ? allOrders.filter(order => PURCHASING_TEAM_STATUSES.includes(order.status))
+    : allOrders;
+
   const markOrdered = useMarkOrderOrdered();
+  const unmarkOrdered = useUnmarkOrderOrdered();
   const receiveItems = useReceiveOrderItems();
+  const { data: flaggedItemsData } = useFlaggedItems();
+  const flaggedCount = flaggedItemsData?.total_count || 0;
 
   const [viewingOrderId, setViewingOrderId] = useState<number | null>(null);
   const { data: viewingOrder, refetch: refetchOrder } = useOrder(viewingOrderId || 0);
@@ -48,6 +64,15 @@ export default function AllOrdersPage() {
       refetchOrder();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Failed to update order');
+    }
+  };
+
+  const handleUnmarkOrdered = async (orderId: number) => {
+    try {
+      await unmarkOrdered.mutateAsync(orderId);
+      toast.success('Order reverted to approved');
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to revert order');
     }
   };
 
@@ -77,7 +102,10 @@ export default function AllOrdersPage() {
     }
   };
 
-  const statuses: OrderStatus[] = ['draft', 'submitted', 'under_review', 'approved', 'changes_requested', 'ordered', 'partially_received', 'received', 'cancelled'];
+  // Available statuses for filter dropdown (limited for purchasing_team)
+  const statuses: OrderStatus[] = isPurchasingTeam
+    ? PURCHASING_TEAM_STATUSES
+    : ['draft', 'submitted', 'under_review', 'approved', 'changes_requested', 'ordered', 'partially_received', 'received', 'cancelled'];
 
   return (
     <RoleGuard allowedRoles={['purchasing_supervisor', 'purchasing_team']}>
@@ -89,9 +117,14 @@ export default function AllOrdersPage() {
               <p className="text-gray-500 mt-1">View and manage orders across all properties</p>
             </div>
             <Link href="/orders/flagged-items">
-              <Button variant="outline">
+              <Button variant={flaggedCount > 0 ? "danger" : "outline"} className="relative">
                 <AlertTriangle className="h-4 w-4 mr-2" />
                 Flagged Items
+                {flaggedCount > 0 && (
+                  <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
+                    {flaggedCount}
+                  </span>
+                )}
               </Button>
             </Link>
           </div>
@@ -135,7 +168,6 @@ export default function AllOrdersPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week Of</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -156,9 +188,6 @@ export default function AllOrdersPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {order.items?.length || 0} items
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {order.total_approved_value ? formatCurrency(order.total_approved_value) : order.total_requested_value ? formatCurrency(order.total_requested_value) : '-'}
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[order.status]}`}>
                           {order.status.replace('_', ' ')}
@@ -168,9 +197,51 @@ export default function AllOrdersPage() {
                         {order.created_by_name || 'Unknown'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={() => setViewingOrderId(order.id)} className="text-primary-600 hover:text-primary-900">
-                          <Eye className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => setViewingOrderId(order.id)} className="text-primary-600 hover:text-primary-900" title="View Details">
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          {order.status === 'approved' && (
+                            <>
+                              <Link
+                                href={`/orders/purchase-list/${order.id}`}
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-full hover:bg-green-700 transition-colors"
+                              >
+                                <ShoppingCart className="h-3 w-3" />
+                                Purchase List
+                              </Link>
+                              <button
+                                onClick={() => handleMarkOrdered(order.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600 text-white text-xs font-medium rounded-full hover:bg-purple-700 transition-colors disabled:opacity-50"
+                                disabled={markOrdered.isPending}
+                              >
+                                <Send className="h-3 w-3" />
+                                Mark Ordered
+                              </button>
+                            </>
+                          )}
+                          {order.status === 'ordered' && (
+                            <>
+                              <Link
+                                href={`/orders/purchase-list/${order.id}`}
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-full hover:bg-green-700 transition-colors"
+                              >
+                                <ShoppingCart className="h-3 w-3" />
+                                View List
+                              </Link>
+                              {!isPurchasingTeam && (
+                                <button
+                                  onClick={() => handleUnmarkOrdered(order.id)}
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-gray-500 text-white text-xs font-medium rounded-full hover:bg-gray-600 transition-colors disabled:opacity-50"
+                                  disabled={unmarkOrdered.isPending}
+                                >
+                                  <Undo2 className="h-3 w-3" />
+                                  Undo
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -245,7 +316,7 @@ export default function AllOrdersPage() {
                             />
                           </td>
                         )}
-                        <td className="px-4 py-2 text-sm">{item.quantity_received ?? '-'} {item.quantity_received ? item.unit : ''}</td>
+                        <td className="px-4 py-2 text-sm">{item.received_quantity ?? '-'} {item.received_quantity ? item.unit : ''}</td>
                       </tr>
                     ))}
                   </tbody>

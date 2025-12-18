@@ -125,7 +125,7 @@ def delete_user(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Soft delete a user (admin only)"""
+    """Delete a user permanently (admin only)"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -136,5 +136,5 @@ def delete_user(
             detail="Cannot delete yourself"
         )
 
-    user.is_active = False
+    db.delete(user)
     db.commit()

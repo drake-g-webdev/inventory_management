@@ -10,6 +10,7 @@ class ReceiptLineItem(BaseModel):
     total_price: Optional[float] = None
     matched_inventory_item_id: Optional[int] = None
     matched_order_item_id: Optional[int] = None
+    matched_order_item_name: Optional[str] = None  # Resolved name from order item
 
 
 class ReceiptBase(BaseModel):
@@ -61,6 +62,8 @@ class ReceiptResponse(ReceiptBase):
 
 class ReceiptWithDetails(ReceiptResponse):
     order_number: Optional[str] = None
+    property_id: Optional[int] = None  # Derived from order.property_id for inventory matching
+    property_name: Optional[str] = None  # Derived from order.property.name
     supplier_name: Optional[str] = None
     uploaded_by_name: Optional[str] = None
     parsed_line_items: List[ReceiptLineItem] = []
@@ -101,6 +104,8 @@ class ReceiptExtractionResult(BaseModel):
     unmatched_items: List[UnmatchedReceiptItem] = []  # Items not matched to order
     confidence_score: float
     raw_text: Optional[str] = None
+    validation_errors: List[str] = []  # Server-side math validation errors
+    calculated_total: Optional[float] = None  # Sum of line items (for comparison)
 
 
 # Financial summaries
@@ -135,3 +140,38 @@ class FinancialDashboard(BaseModel):
     spending_by_supplier: List[SupplierSpendingSummary]
     spending_by_property: List[PropertySpendingSummary]
     spending_trend: List[SpendingByPeriod]
+
+
+# Receipt Code Alias schemas - for mapping receipt codes to inventory items
+class ReceiptCodeAliasCreate(BaseModel):
+    inventory_item_id: int
+    supplier_id: Optional[int] = None
+    receipt_code: str  # The code as it appears on the receipt
+    unit_price: Optional[float] = None
+
+
+class ReceiptCodeAliasResponse(BaseModel):
+    id: int
+    inventory_item_id: int
+    supplier_id: Optional[int] = None
+    receipt_code: str
+    unit_price: Optional[float] = None
+    last_seen: Optional[datetime] = None
+    match_count: int
+    is_active: bool
+    created_at: datetime
+    # Include related info
+    item_name: Optional[str] = None
+    supplier_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MatchReceiptItemRequest(BaseModel):
+    """Request to match a receipt item to an inventory item and save the alias"""
+    receipt_code: str  # The code as it appears on the receipt
+    inventory_item_id: int  # The inventory item to match to
+    supplier_id: Optional[int] = None  # The supplier this alias applies to
+    unit_price: Optional[float] = None  # Price from the receipt
+    receipt_id: Optional[int] = None  # If provided, update the receipt's line item too
