@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
@@ -28,10 +28,11 @@ class Settings(BaseSettings):
     EMAIL_FROM_NAME: str = "SUKAKPAK Purchasing System"
     EMAIL_ENABLED: bool = False  # Set to True when email is configured
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "ignore"  # Ignore any extra env vars not defined here
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"  # Ignore any extra env vars not defined here
+    )
 
 
 settings = Settings()
