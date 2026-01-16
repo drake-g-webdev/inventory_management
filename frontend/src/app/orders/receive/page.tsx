@@ -1,20 +1,22 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Package, CheckCircle, AlertTriangle, ChevronRight, ArrowLeft, Camera, X, Image as ImageIcon } from 'lucide-react';
+import { Package, CheckCircle, AlertTriangle, ChevronRight, ArrowLeft, Camera, X, Image as ImageIcon, Plus, Search } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import { useMyOrders, useReceiveOrderItems, useOrder, useUploadIssuePhoto } from '@/hooks/useOrders';
+import { useMyOrders, useReceiveOrderItems, useOrder, useUploadIssuePhoto, useAddReceivingItem } from '@/hooks/useOrders';
+import { useInventoryItems } from '@/hooks/useInventory';
 import { formatCurrency } from '@/lib/utils';
-import type { Order, OrderItem, ReceiveItemPayload } from '@/types';
+import type { Order, OrderItem, ReceiveItemPayload, InventoryItem } from '@/types';
 import toast from 'react-hot-toast';
 
 const STATUS_COLORS: Record<string, string> = {
   ordered: 'bg-purple-100 text-purple-800',
   partially_received: 'bg-indigo-100 text-indigo-800',
+  received: 'bg-green-100 text-green-800',
 };
 
 interface ReceivingItemState {
@@ -29,37 +31,47 @@ interface ReceivingItemState {
 export default function ReceiveOrdersPage() {
   const { data: allOrders = [], isLoading } = useMyOrders();
   const receiveItems = useReceiveOrderItems();
+  const addReceivingItem = useAddReceivingItem();
 
-  // Filter to only ordered or partially_received orders
+  // Filter to orders that can be received or edited
   const orders = allOrders.filter(
-    o => o.status === 'ordered' || o.status === 'partially_received'
+    o => o.status === 'ordered' || o.status === 'partially_received' || o.status === 'received'
   );
 
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  const { data: selectedOrder } = useOrder(selectedOrderId || 0);
+  const { data: selectedOrder, refetch: refetchOrder } = useOrder(selectedOrderId || 0);
 
   const [receivingItems, setReceivingItems] = useState<Record<number, ReceivingItemState>>({});
   const [showFlagModal, setShowFlagModal] = useState<number | null>(null);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
 
   const initializeReceivingItems = (order: Order) => {
     const items: Record<number, ReceivingItemState> = {};
     order.items?.forEach(item => {
-      if (!item.is_received) {
-        items[item.id] = {
-          item_id: item.id,
-          received_quantity: item.approved_quantity ?? item.requested_quantity,
-          has_issue: false,
-          issue_description: '',
-          issue_photo_url: '',
-          receiving_notes: '',
-        };
-      }
+      // Include all items - both received and not yet received
+      const hasSavedProgress = item.received_quantity !== null && item.received_quantity !== undefined;
+      items[item.id] = {
+        item_id: item.id,
+        received_quantity: hasSavedProgress ? (item.received_quantity as number) : 0,
+        has_issue: item.has_issue || false,
+        issue_description: item.issue_description || '',
+        issue_photo_url: item.issue_photo_url || '',
+        receiving_notes: item.receiving_notes || '',
+      };
     });
     setReceivingItems(items);
   };
 
+  // Reinitialize when server data loads (ensures we have the freshest saved progress)
+  useEffect(() => {
+    if (selectedOrder && selectedOrderId) {
+      initializeReceivingItems(selectedOrder);
+    }
+  }, [selectedOrder?.id]);
+
   const handleSelectOrder = (order: Order) => {
     setSelectedOrderId(order.id);
+    // Initialize with list data first; will reinitialize when useOrder fetches fresh data
     initializeReceivingItems(order);
   };
 
@@ -90,7 +102,7 @@ export default function ReceiveOrdersPage() {
     setShowFlagModal(null);
   };
 
-  const handleReceiveItems = async () => {
+  const handleReceiveItems = async (finalize: boolean) => {
     if (!selectedOrderId) return;
 
     const itemsToReceive = Object.values(receivingItems).filter(
@@ -98,7 +110,7 @@ export default function ReceiveOrdersPage() {
     );
 
     if (itemsToReceive.length === 0) {
-      toast.error('No items to receive');
+      toast.error('No items to save');
       return;
     }
 
@@ -112,27 +124,54 @@ export default function ReceiveOrdersPage() {
           issue_description: item.issue_description || undefined,
           issue_photo_url: item.issue_photo_url || undefined,
           receiving_notes: item.receiving_notes || undefined,
-        }))
+        })),
+        finalize,
       });
 
-      const flaggedCount = itemsToReceive.filter(i => i.has_issue).length;
-      if (flaggedCount > 0) {
-        toast.success(`Items received! ${flaggedCount} item(s) flagged for review.`);
+      if (finalize) {
+        const flaggedCount = itemsToReceive.filter(i => i.has_issue).length;
+        if (flaggedCount > 0) {
+          toast.success(`Items received! ${flaggedCount} item(s) flagged for review.`);
+        } else {
+          toast.success('Items received successfully!');
+        }
+        setSelectedOrderId(null);
+        setReceivingItems({});
       } else {
-        toast.success('Items received successfully!');
+        toast.success('Progress saved! You can continue receiving later.');
       }
-
-      setSelectedOrderId(null);
-      setReceivingItems({});
     } catch (error: any) {
       const detail = error.response?.data?.detail;
-      const message = typeof detail === 'string' ? detail : 'Failed to receive items';
+      const message = typeof detail === 'string' ? detail : 'Failed to save';
       toast.error(message);
     }
   };
 
   const getItemName = (item: OrderItem) => item.item_name || item.custom_item_name || 'Unknown Item';
   const getFlaggedCount = () => Object.values(receivingItems).filter(i => i.has_issue).length;
+
+  const handleAddItem = async (inventoryItemId: number, quantity: number) => {
+    if (!selectedOrderId) return;
+
+    try {
+      await addReceivingItem.mutateAsync({
+        orderId: selectedOrderId,
+        item: {
+          inventory_item_id: inventoryItemId,
+          requested_quantity: quantity,
+        },
+      });
+
+      // Refetch the order to get the updated items list
+      await refetchOrder();
+      setShowAddItemModal(false);
+      toast.success('Item added to order');
+    } catch (error: any) {
+      const detail = error.response?.data?.detail;
+      const message = typeof detail === 'string' ? detail : 'Failed to add item';
+      toast.error(message);
+    }
+  };
 
   return (
     <RoleGuard allowedRoles={['camp_worker']}>
@@ -168,6 +207,11 @@ export default function ReceiveOrdersPage() {
                     {orders.map((order) => {
                       const receivedCount = order.items?.filter(i => i.is_received).length || 0;
                       const totalCount = order.items?.length || 0;
+                      // Count items with saved progress (received_quantity > 0 but not finalized)
+                      const inProgressCount = order.items?.filter(
+                        i => !i.is_received && i.received_quantity !== null && i.received_quantity !== undefined && i.received_quantity > 0
+                      ).length || 0;
+                      const hasSavedProgress = inProgressCount > 0;
 
                       return (
                         <div
@@ -181,13 +225,24 @@ export default function ReceiveOrdersPage() {
                                 {order.order_number}
                               </span>
                               <span className={`px-2 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[order.status]}`}>
-                                {order.status === 'partially_received' ? 'Partially Received' : 'Ready to Receive'}
+                                {order.status === 'received' ? 'Received' : order.status === 'partially_received' ? 'Partially Received' : 'Ready to Receive'}
                               </span>
+                              {hasSavedProgress && (
+                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                  In Progress
+                                </span>
+                              )}
                             </div>
                             <div className="text-sm text-gray-500">
                               <span>Week of {new Date(order.week_of).toLocaleDateString()}</span>
                               <span className="mx-2">|</span>
-                              <span>{receivedCount} of {totalCount} items received</span>
+                              <span>
+                                {receivedCount} received
+                                {inProgressCount > 0 && (
+                                  <span className="text-blue-600">, {inProgressCount} in progress</span>
+                                )}
+                                {' '}of {totalCount} items
+                              </span>
                               {!!order.estimated_total && (
                                 <>
                                   <span className="mx-2">|</span>
@@ -223,6 +278,14 @@ export default function ReceiveOrdersPage() {
                     Mark items as received. Flag any items with quality issues.
                   </p>
                 </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAddItemModal(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Another Item
+                </Button>
               </div>
 
               {selectedOrder && (
@@ -267,35 +330,44 @@ export default function ReceiveOrdersPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-sm text-gray-500 mt-1">
-                                Expected: {item.approved_quantity ?? item.requested_quantity} {item.unit}
+                              <div className="text-sm mt-1">
+                                <span className="font-medium text-gray-700">
+                                  Expected: {item.approved_quantity ?? item.requested_quantity} {item.unit}
+                                </span>
                                 {item.unit_price && (
-                                  <span className="ml-2">@ {formatCurrency(item.unit_price)}/{item.unit}</span>
+                                  <span className="ml-2 text-gray-500">@ {formatCurrency(item.unit_price)}/{item.unit}</span>
                                 )}
                               </div>
-                              {isAlreadyReceived && item.received_quantity !== undefined && (
-                                <div className="text-sm text-green-600 mt-1">
-                                  Received: {item.received_quantity} {item.unit}
-                                </div>
-                              )}
-                              {item.issue_description && (
+                              {item.issue_description && !state?.has_issue && (
                                 <div className="mt-2 p-2 bg-amber-50 rounded text-sm text-amber-800">
                                   <strong>Issue:</strong> {item.issue_description}
                                 </div>
                               )}
                             </div>
 
-                            {!isAlreadyReceived && state && (
+                            {state && (
                               <div className="flex items-center gap-4">
                                 <div className="flex flex-col items-end">
-                                  <label className="text-xs text-gray-500 mb-1">Qty Received</label>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={state.received_quantity}
-                                    onChange={(e) => handleQuantityChange(item.id, parseFloat(e.target.value) || 0)}
-                                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center"
-                                  />
+                                  <label className="text-xs text-gray-500 mb-1">{isAlreadyReceived ? 'Edit Qty' : 'Qty Received'}</label>
+                                  {(() => {
+                                    const expected = item.approved_quantity ?? item.requested_quantity;
+                                    const received = state.received_quantity;
+                                    let inputClass = 'border-gray-300 bg-gray-50 text-gray-400'; // 0 received
+                                    if (received > 0 && received < expected) {
+                                      inputClass = 'border-amber-300 bg-amber-50 text-amber-700 font-medium'; // partial
+                                    } else if (received >= expected) {
+                                      inputClass = 'border-green-300 bg-green-50 text-green-700 font-medium'; // full
+                                    }
+                                    return (
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={state.received_quantity}
+                                        onChange={(e) => handleQuantityChange(item.id, parseFloat(e.target.value) || 0)}
+                                        className={`w-24 px-3 py-2 border rounded-lg text-center ${inputClass}`}
+                                      />
+                                    );
+                                  })()}
                                 </div>
 
                                 <button
@@ -343,19 +415,35 @@ export default function ReceiveOrdersPage() {
                     })}
                   </div>
 
-                  <div className="p-4 bg-gray-50 border-t flex justify-end gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={() => { setSelectedOrderId(null); setReceivingItems({}); }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleReceiveItems}
-                      disabled={receiveItems.isPending || Object.keys(receivingItems).length === 0}
-                    >
-                      {receiveItems.isPending ? 'Saving...' : 'Receive Items'}
-                    </Button>
+                  <div className="p-4 bg-gray-50 border-t">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <p className="text-sm text-gray-500">
+                        {selectedOrder?.status === 'received'
+                          ? 'Edit quantities and save changes. Inventory will be adjusted automatically.'
+                          : 'Save progress to continue receiving later, or finalize to update inventory.'}
+                      </p>
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          onClick={() => { setSelectedOrderId(null); setReceivingItems({}); }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleReceiveItems(false)}
+                          disabled={receiveItems.isPending || Object.keys(receivingItems).length === 0}
+                        >
+                          {receiveItems.isPending ? 'Saving...' : 'Save Progress'}
+                        </Button>
+                        <Button
+                          onClick={() => handleReceiveItems(true)}
+                          disabled={receiveItems.isPending || Object.keys(receivingItems).length === 0}
+                        >
+                          {receiveItems.isPending ? 'Saving...' : selectedOrder?.status === 'received' ? 'Save Changes' : 'Finalize Receiving'}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -376,6 +464,23 @@ export default function ReceiveOrdersPage() {
               initialPhotoUrl={receivingItems[showFlagModal]?.issue_photo_url || ''}
               onSave={(description, photoUrl) => handleSaveIssue(showFlagModal, description, photoUrl)}
               onCancel={() => setShowFlagModal(null)}
+            />
+          )}
+        </Modal>
+
+        {/* Add Late Item Modal */}
+        <Modal
+          isOpen={showAddItemModal}
+          onClose={() => setShowAddItemModal(false)}
+          title="Add Late Arrival Item"
+        >
+          {selectedOrder && (
+            <AddLateItemForm
+              propertyId={selectedOrder.property_id}
+              existingItemIds={(selectedOrder.items || []).map(i => i.inventory_item_id).filter((id): id is number => id !== null)}
+              onAdd={handleAddItem}
+              onCancel={() => setShowAddItemModal(false)}
+              isAdding={addReceivingItem.isPending}
             />
           )}
         </Modal>
@@ -544,6 +649,144 @@ function FlagIssueForm({
           disabled={!description.trim() || isUploading}
         >
           Save Issue
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AddLateItemForm({
+  propertyId,
+  existingItemIds,
+  onAdd,
+  onCancel,
+  isAdding,
+}: {
+  propertyId: number;
+  existingItemIds: number[];
+  onAdd: (inventoryItemId: number, quantity: number) => void;
+  onCancel: () => void;
+  isAdding: boolean;
+}) {
+  const { data: inventoryItems = [], isLoading } = useInventoryItems(propertyId);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [quantity, setQuantity] = useState(1);
+
+  // Filter items that are not already in the order and match the search
+  const availableItems = useMemo(() => {
+    return inventoryItems
+      .filter(item => !existingItemIds.includes(item.id))
+      .filter(item => {
+        if (!searchTerm.trim()) return true;
+        const search = searchTerm.toLowerCase();
+        return (
+          item.name.toLowerCase().includes(search) ||
+          item.category?.toLowerCase().includes(search) ||
+          item.subcategory?.toLowerCase().includes(search)
+        );
+      })
+      .slice(0, 20); // Limit to 20 results
+  }, [inventoryItems, existingItemIds, searchTerm]);
+
+  const handleSubmit = () => {
+    if (!selectedItem) return;
+    onAdd(selectedItem.id, quantity);
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-gray-600">
+        Add items that arrived late from a previous order.
+      </p>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search inventory items..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setSelectedItem(null);
+          }}
+          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+        />
+      </div>
+
+      {/* Item List */}
+      {!selectedItem ? (
+        <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+          {isLoading ? (
+            <div className="p-4 text-center text-gray-500">Loading inventory...</div>
+          ) : availableItems.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">
+              {searchTerm ? 'No matching items found' : 'All items are already in this order'}
+            </div>
+          ) : (
+            availableItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setSelectedItem(item)}
+                className="w-full p-3 text-left hover:bg-gray-50 flex justify-between items-center"
+              >
+                <div>
+                  <div className="font-medium text-gray-900">{item.name}</div>
+                  <div className="text-sm text-gray-500">
+                    {item.category}
+                    {item.subcategory && ` > ${item.subcategory}`}
+                    {item.unit && ` | ${item.unit}`}
+                  </div>
+                </div>
+                <Plus className="h-5 w-5 text-gray-400" />
+              </button>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="border border-primary-200 bg-primary-50 rounded-lg p-4">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="font-medium text-gray-900">{selectedItem.name}</div>
+              <div className="text-sm text-gray-500">
+                {selectedItem.category}
+                {selectedItem.subcategory && ` > ${selectedItem.subcategory}`}
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedItem(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="mt-4 flex items-center gap-4">
+            <label className="text-sm font-medium text-gray-700">
+              Quantity Received:
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+              className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-center"
+            />
+            <span className="text-gray-500">{selectedItem.unit}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-3 pt-2">
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSubmit}
+          disabled={!selectedItem || isAdding}
+        >
+          {isAdding ? 'Adding...' : 'Add Item'}
         </Button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { Order, CreateOrderPayload, OrderStatus, SupplierPurchaseList, FlaggedItemsList, ReceiveItemPayload } from '@/types';
+import type { Order, CreateOrderPayload, OrderStatus, SupplierPurchaseList, FlaggedItemsList, ReceiveItemPayload, UnreceivedItemsList } from '@/types';
 
 export function useOrders(params?: { property_id?: number; status?: OrderStatus }) {
   return useQuery({
@@ -108,6 +108,19 @@ export function useResubmitOrder() {
   });
 }
 
+export function useWithdrawOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const response = await api.post<Order>(`/orders/${id}/withdraw`, {});
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
 export function useMarkOrderOrdered() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -137,13 +150,16 @@ export function useUnmarkOrderOrdered() {
 export function useReceiveOrderItems() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, items }: { id: number; items: { item_id: number; received_quantity: number; has_issue?: boolean; issue_description?: string; issue_photo_url?: string; receiving_notes?: string }[] }) => {
-      const response = await api.post<Order>(`/orders/${id}/receive`, { items });
+    mutationFn: async ({ id, items, finalize = false }: { id: number; items: { item_id: number; received_quantity: number; has_issue?: boolean; issue_description?: string; issue_photo_url?: string; receiving_notes?: string }[]; finalize?: boolean }) => {
+      const response = await api.post<Order>(`/orders/${id}/receive`, { items, finalize });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      // Only invalidate inventory if finalizing (when stock actually updates)
+      if (variables.finalize) {
+        queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      }
     },
   });
 }
@@ -173,7 +189,7 @@ export function useUploadIssuePhoto() {
 export function useUpdateOrderItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ orderId, itemId, data }: { orderId: number; itemId: number; data: { quantity_approved?: number; review_notes?: string; supplier_id?: number } }) => {
+    mutationFn: async ({ orderId, itemId, data }: { orderId: number; itemId: number; data: { approved_quantity?: number; reviewer_notes?: string; supplier_id?: number } }) => {
       const response = await api.put(`/orders/${orderId}/items/${itemId}`, data);
       return response.data;
     },
@@ -273,6 +289,46 @@ export function useOrdersReadyToReceive() {
       const orderedResponse = await api.get<Order[]>('/orders', { params: { status: 'ordered' } });
       const partialResponse = await api.get<Order[]>('/orders', { params: { status: 'partially_received' } });
       return [...orderedResponse.data, ...partialResponse.data];
+    },
+  });
+}
+
+export function useAddReceivingItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orderId, item }: { orderId: number; item: { inventory_item_id?: number; custom_item_name?: string; requested_quantity: number; unit?: string } }) => {
+      const response = await api.post<Order>(`/orders/${orderId}/add-receiving-item`, item);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+export function useUnreceivedItems(propertyId?: number) {
+  return useQuery({
+    queryKey: ['unreceived-items', propertyId],
+    queryFn: async () => {
+      // If propertyId is provided, get items for that property, otherwise get all
+      const url = propertyId
+        ? `/orders/unreceived-items/${propertyId}`
+        : '/orders/unreceived-items';
+      const response = await api.get<UnreceivedItemsList>(url);
+      return response.data;
+    },
+  });
+}
+
+export function useDismissShortage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderItemIds: number[]) => {
+      const response = await api.post('/orders/dismiss-shortage', { order_item_ids: orderItemIds });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unreceived-items'] });
     },
   });
 }

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -14,8 +14,8 @@ router = APIRouter(prefix="/users", tags=["Users"])
 def list_users(
     property_id: Optional[int] = None,
     role: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=500, description="Max records to return"),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
@@ -138,3 +138,33 @@ def delete_user(
 
     db.delete(user)
     db.commit()
+
+
+@router.post("/{user_id}/reset-password")
+def reset_user_password(
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Reset a user's password to a temporary password (admin only)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Generate a temporary password (alphanumeric only for easy copy/paste)
+    import secrets
+    import string
+    alphabet = string.ascii_letters + string.digits
+    temp_password = ''.join(secrets.choice(alphabet) for _ in range(10))
+
+    user.hashed_password = get_password_hash(temp_password)
+    db.commit()
+    db.refresh(user)
+
+    # Return the temp password so admin can share with user
+    return {
+        "message": "Password reset successfully",
+        "temporary_password": temp_password,
+        "user_email": user.email,
+        "user_name": user.full_name
+    }

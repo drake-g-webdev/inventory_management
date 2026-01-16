@@ -32,8 +32,8 @@ def list_inventory_items(
     category: Optional[str] = None,
     supplier_id: Optional[int] = None,
     low_stock_only: bool = False,
-    skip: int = 0,
-    limit: int = 1000,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(1000, ge=1, le=5000, description="Max records to return"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -204,8 +204,8 @@ def delete_inventory_item(
 @router.get("/counts", response_model=List[InventoryCountResponse])
 def list_inventory_counts(
     property_id: Optional[int] = None,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=500, description="Max records to return"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

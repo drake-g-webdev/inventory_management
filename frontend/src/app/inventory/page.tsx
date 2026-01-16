@@ -13,6 +13,7 @@ import { useSuppliers } from '@/hooks/useSuppliers';
 import api from '@/lib/api';
 import type { InventoryItem, CreateInventoryItemPayload, InventoryCount } from '@/types';
 import toast from 'react-hot-toast';
+import { UNITS, SUBCATEGORY_DEFAULT_UNITS } from '@/lib/constants';
 
 interface ExtractedCount {
   item_id: number;
@@ -28,15 +29,7 @@ const SUBCATEGORIES: Record<string, string[]> = {
   'Beverages': ['BIB', 'Cans/Bottles', 'Dry', 'Concentrate'],
 };
 
-// Default units for subcategories
-const SUBCATEGORY_DEFAULT_UNITS: Record<string, string> = {
-  'BIB': 'Unit',
-  'Cans/Bottles': 'Case',
-  'Dry': 'Each',
-  'Concentrate': 'Each',
-};
-
-const UNITS = ['Each', 'Lb', 'Oz', 'Gallon', 'Quart', 'Pint', 'Case', 'Box', 'Bag', 'Dozen', 'Bunch', 'Bundle', 'Head', 'Jar', 'Can', 'Bottle', 'Pack', 'Roll', 'Sheet', 'Unit'];
+// UNITS and SUBCATEGORY_DEFAULT_UNITS imported from @/lib/constants
 
 function groupByCategory(items: InventoryItem[]) {
   return items.reduce((acc, item) => {
@@ -352,12 +345,13 @@ export default function InventoryPage() {
       .map(ec => ({
         inventory_item_id: ec.item_id,
         quantity: ec.quantity,
+        confidence: ec.confidence,
+        notes: ec.notes || null,
       }));
 
     try {
       await createCount.mutateAsync({
         property_id: propertyId,
-        count_date: new Date().toISOString().split('T')[0],
         notes: 'Scanned from photos',
         items: countItems,
       });

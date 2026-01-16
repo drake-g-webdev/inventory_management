@@ -77,13 +77,12 @@ export default function InventoryCountPage() {
       .filter(([, qty]) => qty !== null)
       .map(([id, qty]) => ({
         inventory_item_id: parseInt(id),
-        counted_quantity: qty as number,
+        quantity: qty as number,
       }));
 
     try {
       await createCount.mutateAsync({
         property_id: propertyId,
-        count_date: new Date().toISOString().split('T')[0],
         notes: notes || undefined,
         items,
       });
@@ -222,7 +221,6 @@ export default function InventoryCountPage() {
       <tr>
         <td class="item-name">${item.name}</td>
         <td class="unit-cell">${item.unit}</td>
-        <td class="par-cell">${item.par_level || '-'}</td>
         <td class="count-cell"></td>
       </tr>
     `;
@@ -234,7 +232,7 @@ export default function InventoryCountPage() {
       items.forEach((item, index) => {
         if (item.categoryName !== currentCategory) {
           currentCategory = item.categoryName;
-          html += `<tr class="category-row"><td colspan="4">${currentCategory}</td></tr>`;
+          html += `<tr class="category-row"><td colspan="3">${currentCategory}</td></tr>`;
         }
         html += renderItem(item, index);
       });
@@ -262,7 +260,7 @@ export default function InventoryCountPage() {
             border-bottom: 1px solid #333;
           }
           .header h1 { font-size: 16px; margin-bottom: 2px; }
-          .header p { font-size: 10px; color: #666; margin: 1px 0; }
+          .header p { font-size: 10px; color: #000; margin: 1px 0; }
           .info-row {
             display: flex;
             gap: 20px;
@@ -307,25 +305,24 @@ export default function InventoryCountPage() {
             padding: 3px 4px;
           }
           .item-name {
-            max-width: 120px;
+            max-width: 140px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
           }
           .count-cell {
-            width: 45px;
-            min-width: 45px;
+            width: 50px;
+            min-width: 50px;
             background: #fffef0;
           }
-          .unit-cell { width: 35px; min-width: 35px; font-size: 7px; }
-          .par-cell { width: 30px; min-width: 30px; text-align: center; }
+          .unit-cell { width: 45px; min-width: 45px; font-size: 7px; }
 
           .footer {
             margin-top: 8px;
             padding-top: 6px;
             border-top: 1px solid #ccc;
             font-size: 8px;
-            color: #666;
+            color: #000;
           }
 
           @media print {
@@ -359,7 +356,6 @@ export default function InventoryCountPage() {
                 <tr>
                   <th>Item</th>
                   <th class="unit-cell">Unit</th>
-                  <th class="par-cell">Par</th>
                   <th class="count-cell">Count</th>
                 </tr>
               </thead>
@@ -374,7 +370,6 @@ export default function InventoryCountPage() {
                 <tr>
                   <th>Item</th>
                   <th class="unit-cell">Unit</th>
-                  <th class="par-cell">Par</th>
                   <th class="count-cell">Count</th>
                 </tr>
               </thead>

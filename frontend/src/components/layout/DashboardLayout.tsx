@@ -4,6 +4,7 @@ import { useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Toaster } from 'react-hot-toast';
 import Sidebar from './Sidebar';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 // import NotificationBell from '@/components/notifications/NotificationBell';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -42,7 +43,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="p-8">{children}</div>
+          <ErrorBoundary>
+            <div className="p-8">{children}</div>
+          </ErrorBoundary>
         </main>
       </div>
       <Toaster position="top-right" />

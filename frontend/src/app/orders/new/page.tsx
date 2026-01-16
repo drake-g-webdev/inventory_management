@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, AlertTriangle, Search } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, Search, X } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { useAuthStore } from '@/stores/authStore';
 import { useInventoryItems, useLowStockItems } from '@/hooks/useInventory';
-import { useCreateOrder } from '@/hooks/useOrders';
-import type { CreateOrderPayload, InventoryItem, OrderItemFlag } from '@/types';
+import { useCreateOrder, useUnreceivedItems, useDismissShortage } from '@/hooks/useOrders';
+import type { CreateOrderPayload, InventoryItem, OrderItemFlag, UnreceivedItem } from '@/types';
 import toast from 'react-hot-toast';
+import { UNITS } from '@/lib/constants';
 
 interface OrderLineItem {
   inventory_item_id: number | null;
@@ -33,7 +34,12 @@ export default function NewOrderPage() {
   const { user } = useAuthStore();
   const { data: inventory = [] } = useInventoryItems(user?.property_id || undefined);
   const { data: lowStock = [] } = useLowStockItems(user?.property_id || undefined);
+  const { data: unreceivedData } = useUnreceivedItems(user?.property_id || undefined);
   const createOrder = useCreateOrder();
+  const dismissShortage = useDismissShortage();
+
+  // Track which unreceived items have been added (by inventory_item_id or item_name for custom)
+  const [addedUnreceivedKeys, setAddedUnreceivedKeys] = useState<Set<string>>(new Set());
 
   const [weekOf, setWeekOf] = useState(() => {
     const today = new Date();
@@ -46,7 +52,7 @@ export default function NewOrderPage() {
   const [showAddItem, setShowAddItem] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [customItemName, setCustomItemName] = useState('');
-  const [customUnit, setCustomUnit] = useState('unit');
+  const [customUnit, setCustomUnit] = useState('Each');
   const [inventorySearch, setInventorySearch] = useState('');
 
   // Filter inventory based on search
@@ -98,7 +104,7 @@ export default function NewOrderPage() {
         inventory_unit: null,
       }]);
       setCustomItemName('');
-      setCustomUnit('unit');
+      setCustomUnit('Each');
     } else {
       const invItem = inventory.find(i => i.id === parseInt(selectedItemId));
       if (!invItem) return;
@@ -135,6 +141,105 @@ export default function NewOrderPage() {
 
   const removeItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
+  };
+
+  // Get unique key for an unreceived item
+  const getUnreceivedKey = (unreceived: UnreceivedItem) => {
+    return unreceived.inventory_item_id
+      ? `inv:${unreceived.inventory_item_id}`
+      : `custom:${unreceived.item_name.toLowerCase()}`;
+  };
+
+  const addUnreceivedItem = (unreceived: UnreceivedItem) => {
+    const key = getUnreceivedKey(unreceived);
+
+    // Check if already added
+    if (addedUnreceivedKeys.has(key)) {
+      toast.error('Item already added');
+      return;
+    }
+
+    // Also check if item is already in the list by inventory_item_id
+    if (unreceived.inventory_item_id && items.some(i => i.inventory_item_id === unreceived.inventory_item_id)) {
+      toast.error('Item already in order');
+      return;
+    }
+
+    // Find inventory item to get additional details
+    const invItem = unreceived.inventory_item_id
+      ? inventory.find(i => i.id === unreceived.inventory_item_id)
+      : null;
+
+    const orderInfo = unreceived.order_count > 1
+      ? `${unreceived.order_count} orders`
+      : unreceived.latest_order_number || 'previous order';
+
+    setItems([...items, {
+      inventory_item_id: unreceived.inventory_item_id,
+      custom_item_name: unreceived.inventory_item_id ? null : unreceived.item_name,
+      quantity_requested: Math.ceil(unreceived.total_shortage),
+      unit: unreceived.unit || invItem?.effective_order_unit || invItem?.unit || 'unit',
+      flag: 'previous_shortage' as OrderItemFlag,
+      notes: `From ${orderInfo} (${unreceived.total_shortage} not received)`,
+      name: unreceived.item_name,
+      suggested_qty: Math.ceil(unreceived.total_shortage),
+      par_level: invItem?.par_level || null,
+      current_stock: invItem?.current_stock || null,
+      inventory_unit: invItem?.unit || null,
+    }]);
+
+    setAddedUnreceivedKeys(prev => new Set([...Array.from(prev), key]));
+  };
+
+  const addAllUnreceivedItems = () => {
+    const unreceivedItems = unreceivedData?.items || [];
+    let addedCount = 0;
+
+    unreceivedItems.forEach(unreceived => {
+      const key = getUnreceivedKey(unreceived);
+
+      // Skip if already added
+      if (addedUnreceivedKeys.has(key)) return;
+      if (unreceived.inventory_item_id && items.some(i => i.inventory_item_id === unreceived.inventory_item_id)) return;
+
+      const invItem = unreceived.inventory_item_id
+        ? inventory.find(i => i.id === unreceived.inventory_item_id)
+        : null;
+
+      const orderInfo = unreceived.order_count > 1
+        ? `${unreceived.order_count} orders`
+        : unreceived.latest_order_number || 'previous order';
+
+      setItems(prev => [...prev, {
+        inventory_item_id: unreceived.inventory_item_id,
+        custom_item_name: unreceived.inventory_item_id ? null : unreceived.item_name,
+        quantity_requested: Math.ceil(unreceived.total_shortage),
+        unit: unreceived.unit || invItem?.effective_order_unit || invItem?.unit || 'unit',
+        flag: 'previous_shortage' as OrderItemFlag,
+        notes: `From ${orderInfo} (${unreceived.total_shortage} not received)`,
+        name: unreceived.item_name,
+        suggested_qty: Math.ceil(unreceived.total_shortage),
+        par_level: invItem?.par_level || null,
+        current_stock: invItem?.current_stock || null,
+        inventory_unit: invItem?.unit || null,
+      }]);
+
+      setAddedUnreceivedKeys(prev => new Set([...Array.from(prev), key]));
+      addedCount++;
+    });
+
+    if (addedCount > 0) {
+      toast.success(`Added ${addedCount} unreceived item(s)`);
+    }
+  };
+
+  const handleDismissShortage = async (unreceived: UnreceivedItem) => {
+    try {
+      await dismissShortage.mutateAsync(unreceived.source_order_item_ids);
+      toast.success('Shortage dismissed');
+    } catch (error) {
+      toast.error('Failed to dismiss shortage');
+    }
   };
 
   const handleSubmit = async (asDraft: boolean) => {
@@ -205,6 +310,95 @@ export default function NewOrderPage() {
               />
             </div>
 
+            {/* Unreceived items from previous orders */}
+            {unreceivedData && unreceivedData.items.length > 0 && (
+              <div className="bg-orange-50 border border-orange-300 rounded-lg mb-6 overflow-hidden">
+                <div className="bg-orange-500 px-4 py-3 flex justify-between items-center">
+                  <div className="flex items-center">
+                    <AlertTriangle className="h-5 w-5 text-white mr-2" />
+                    <h3 className="text-white font-semibold">Items Not Received from Previous Orders</h3>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="bg-white text-orange-600 border-white hover:bg-orange-100"
+                    onClick={addAllUnreceivedItems}
+                  >
+                    Add All to Order
+                  </Button>
+                </div>
+                <div className="p-4">
+                  <p className="text-sm text-orange-800 mb-3">
+                    The following items were not received or had quantity shortages from previous orders:
+                  </p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {unreceivedData.items.map((item) => {
+                      const key = getUnreceivedKey(item);
+                      const isAdded = addedUnreceivedKeys.has(key) ||
+                        (item.inventory_item_id && items.some(i => i.inventory_item_id === item.inventory_item_id));
+
+                      return (
+                        <div
+                          key={key}
+                          className={`flex items-center justify-between p-3 rounded-lg border ${
+                            isAdded ? 'bg-green-50 border-green-200' : 'bg-white border-orange-200'
+                          }`}
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-gray-900">{item.item_name}</span>
+                              {item.order_count > 1 ? (
+                                <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-800 rounded-full">
+                                  {item.order_count} orders
+                                </span>
+                              ) : (
+                                <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-800 rounded-full">
+                                  {item.latest_order_number}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              <span className="text-orange-700 font-medium">Total short: {item.total_shortage} {item.unit}</span>
+                              {item.supplier_name && (
+                                <span className="ml-2 text-gray-500">({item.supplier_name})</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isAdded ? (
+                              <span className="text-green-600 text-sm font-medium">Added ✓</span>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-orange-600 border-orange-300 hover:bg-orange-100"
+                                  onClick={() => addUnreceivedItem(item)}
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  Add
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-gray-500 border-gray-300 hover:bg-gray-100"
+                                  onClick={() => handleDismissShortage(item)}
+                                  disabled={dismissShortage.isPending}
+                                  title="Dismiss this shortage (won't appear again)"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Low stock notice */}
             {lowStock.length > 0 && items.length > 0 && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 flex items-start">
@@ -239,20 +433,28 @@ export default function NewOrderPage() {
                     </tr>
                   ) : (
                     items.map((item, index) => (
-                      <tr key={index} className={item.flag === 'low_stock' ? 'bg-yellow-50' : ''}>
+                      <tr key={index} className={
+                        item.flag === 'low_stock' ? 'bg-yellow-50' :
+                        item.flag === 'previous_shortage' ? 'bg-orange-50' : ''
+                      }>
                         <td className="px-4 py-3">
                           <div className="flex items-center">
                             {item.flag === 'low_stock' && <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2" />}
+                            {item.flag === 'previous_shortage' && <AlertTriangle className="h-4 w-4 text-orange-500 mr-2" />}
                             <span className="font-medium">{item.name}</span>
                           </div>
+                          {item.notes && item.flag === 'previous_shortage' && (
+                            <div className="text-xs text-orange-600 mt-1">{item.notes}</div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-1 text-xs rounded-full ${
                             item.flag === 'low_stock' ? 'bg-yellow-100 text-yellow-800' :
+                            item.flag === 'previous_shortage' ? 'bg-orange-100 text-orange-800' :
                             item.flag === 'custom' ? 'bg-purple-100 text-purple-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
-                            {item.flag?.replace('_', ' ') || 'manual'}
+                            {item.flag === 'previous_shortage' ? 'prev shortage' : item.flag?.replace('_', ' ') || 'manual'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center text-sm text-gray-600">
@@ -322,8 +524,18 @@ export default function NewOrderPage() {
                 {inventorySearch && (
                   <div className="mb-4 max-h-60 overflow-y-auto border border-gray-200 rounded-lg bg-white">
                     {filteredInventory.length === 0 ? (
-                      <div className="p-4 text-center text-gray-500 text-sm">
-                        No items found matching "{inventorySearch}"
+                      <div className="p-4 text-center">
+                        <p className="text-gray-500 text-sm mb-3">No items found matching "{inventorySearch}"</p>
+                        <button
+                          onClick={() => {
+                            setCustomItemName(inventorySearch);
+                            setSelectedItemId('custom');
+                            setInventorySearch('');
+                          }}
+                          className="text-primary-600 hover:text-primary-800 font-medium text-sm"
+                        >
+                          + Add "{inventorySearch}" as custom item
+                        </button>
                       </div>
                     ) : (
                       filteredInventory.map(item => (
@@ -372,45 +584,58 @@ export default function NewOrderPage() {
                   </div>
                 )}
 
-                {/* Or select from dropdown */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Or select from dropdown</label>
-                    <select
-                      value={selectedItemId}
-                      onChange={(e) => setSelectedItemId(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="">Choose from inventory...</option>
-                      <option value="custom">-- Create Custom Item --</option>
-                      {filteredInventory.map(item => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} ({item.current_stock} {item.unit} in stock){item.is_low_stock ? ' [LOW]' : ''}{!item.is_recurring ? ' [One-off]' : ''}
-                        </option>
-                      ))}
-                    </select>
+                {/* Custom item entry - always visible */}
+                {selectedItemId === 'custom' ? (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium text-purple-900">Add Custom Item</h4>
+                      <button
+                        onClick={() => { setSelectedItemId(''); setCustomItemName(''); setCustomUnit('Each'); }}
+                        className="text-purple-600 hover:text-purple-800 text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="col-span-2">
+                        <Input
+                          id="custom_name"
+                          label="Item Name"
+                          value={customItemName}
+                          onChange={(e) => setCustomItemName(e.target.value)}
+                          placeholder="Enter item name"
+                          autoFocus
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="custom_unit" className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                        <select
+                          id="custom_unit"
+                          value={customUnit}
+                          onChange={(e) => setCustomUnit(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        >
+                          {UNITS.map(unit => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button onClick={addItem} disabled={!customItemName.trim()}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Custom Item
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-end gap-2">
-                    <Button onClick={addItem} disabled={!selectedItemId}>Add</Button>
-                  </div>
-                </div>
-                {selectedItemId === 'custom' && (
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <Input
-                      id="custom_name"
-                      label="Custom Item Name"
-                      value={customItemName}
-                      onChange={(e) => setCustomItemName(e.target.value)}
-                      placeholder="Enter item name"
-                    />
-                    <Input
-                      id="custom_unit"
-                      label="Unit"
-                      value={customUnit}
-                      onChange={(e) => setCustomUnit(e.target.value)}
-                      placeholder="lb, gallon, case, etc."
-                    />
-                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSelectedItemId('custom')}
+                    className="w-full py-3 border-2 border-dashed border-purple-300 rounded-lg text-purple-600 hover:bg-purple-50 hover:border-purple-400 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Custom/One-Off Item (not in inventory)
+                  </button>
                 )}
               </div>
             ) : (

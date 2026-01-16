@@ -21,14 +21,28 @@ export default function LoginPage() {
       toast.success('Login successful!');
       // Redirect based on role
       const user = useAuthStore.getState().user;
+      console.log('[Login] User after login:', user);
+      console.log('[Login] User role:', user?.role);
+
+      let redirectPath = '/dashboard';
       if (user?.role === 'camp_worker') {
-        router.push('/inventory');
+        redirectPath = '/inventory';
       } else if (user?.role === 'purchasing_team') {
-        router.push('/orders/all');
-      } else {
-        router.push('/dashboard');
+        redirectPath = '/orders/all';
       }
+
+      console.log('[Login] Redirecting to:', redirectPath);
+      router.replace(redirectPath);
+      // Fallback in case Next.js router doesn't work
+      setTimeout(() => {
+        if (window.location.pathname === '/auth/login') {
+          console.log('[Login] Fallback redirect triggered');
+          window.location.href = redirectPath;
+        }
+      }, 500);
+      console.log('[Login] router.replace called');
     } catch (error: any) {
+      console.error('[Login] Error:', error);
       toast.error(error.response?.data?.detail || 'Login failed');
     }
   };

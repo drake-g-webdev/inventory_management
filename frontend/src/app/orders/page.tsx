@@ -118,6 +118,11 @@ export default function MyOrdersPage() {
                             <Edit2 className="h-4 w-4 inline" />
                           </Link>
                         )}
+                        {(order.status === 'submitted' || order.status === 'under_review' || order.status === 'approved') && (
+                          <Link href={`/orders/${order.id}/edit`} className="text-amber-600 hover:text-amber-900" title="Withdraw & Edit">
+                            <Edit2 className="h-4 w-4 inline" />
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ))}

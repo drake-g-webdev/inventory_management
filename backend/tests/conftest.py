@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -32,6 +33,17 @@ def db_session():
         Base.metadata.drop_all(bind=engine)
 
 
+@pytest.fixture(scope="function", autouse=True)
+def mock_emails():
+    """Disable all email sending during tests to prevent real emails."""
+    with patch('app.core.email.send_email', return_value=True), \
+         patch('app.core.email.send_order_submitted_notification', return_value=None), \
+         patch('app.core.email.send_order_approved_notification', return_value=None), \
+         patch('app.core.email.send_order_changes_requested_notification', return_value=None), \
+         patch('app.core.email.send_flagged_items_notification', return_value=None):
+        yield
+
+
 @pytest.fixture(scope="function")
 def client(db_session):
     """Create a test client with database override."""
@@ -42,8 +54,8 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
+    test_client = TestClient(app)
+    yield test_client
     app.dependency_overrides.clear()
 
 

@@ -8,9 +8,10 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
 import { useAuthStore } from '@/stores/authStore';
-import { useOrder, useUpdateDraftOrderItem, useDeleteOrderItem, useAddOrderItem, useSubmitOrder, useResubmitOrder } from '@/hooks/useOrders';
+import { useOrder, useUpdateDraftOrderItem, useDeleteOrderItem, useAddOrderItem, useSubmitOrder, useResubmitOrder, useWithdrawOrder } from '@/hooks/useOrders';
 import { useInventoryItems } from '@/hooks/useInventory';
 import toast from 'react-hot-toast';
+import { UNITS } from '@/lib/constants';
 
 export default function EditOrderPage() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function EditOrderPage() {
   const addItem = useAddOrderItem();
   const submitOrder = useSubmitOrder();
   const resubmitOrder = useResubmitOrder();
+  const withdrawOrder = useWithdrawOrder();
 
   const [showAddItem, setShowAddItem] = useState(false);
   const [showInventoryBrowser, setShowInventoryBrowser] = useState(false);
@@ -32,10 +34,22 @@ export default function EditOrderPage() {
   const [inventoryBrowserSearch, setInventoryBrowserSearch] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [customItemName, setCustomItemName] = useState('');
-  const [customUnit, setCustomUnit] = useState('unit');
+  const [customUnit, setCustomUnit] = useState('Each');
 
-  // Check if order can be edited
+  // Check if order can be edited (draft, changes_requested) or withdrawn (submitted, under_review, approved)
   const canEdit = order && (order.status === 'draft' || order.status === 'changes_requested');
+  const canWithdraw = order && (order.status === 'submitted' || order.status === 'under_review' || order.status === 'approved');
+
+  const handleWithdraw = async () => {
+    if (!confirm('Withdraw this order from review? You can edit and resubmit it.')) return;
+    try {
+      await withdrawOrder.mutateAsync(orderId);
+      toast.success('Order withdrawn - you can now edit it');
+      refetch();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to withdraw order');
+    }
+  };
 
   // Filter inventory for add item search
   const existingItemIds = new Set(order?.items?.map(i => i.inventory_item_id).filter(Boolean) || []);
@@ -140,7 +154,7 @@ export default function EditOrderPage() {
       });
       toast.success('Custom item added');
       setCustomItemName('');
-      setCustomUnit('unit');
+      setCustomUnit('Each');
       setShowAddItem(false);
       refetch();
     } catch (error: any) {
@@ -190,6 +204,75 @@ export default function EditOrderPage() {
             <Link href="/orders" className="text-primary-600 hover:underline mt-2 block">
               Back to Orders
             </Link>
+          </div>
+        </DashboardLayout>
+      </RoleGuard>
+    );
+  }
+
+  // If order is submitted/under_review, show withdraw option
+  if (canWithdraw) {
+    return (
+      <RoleGuard allowedRoles={['camp_worker']}>
+        <DashboardLayout>
+          <div className="space-y-6">
+            <div className="flex items-center gap-4">
+              <Link href="/orders" className="text-gray-500 hover:text-gray-700">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Order {order.order_number}</h1>
+                <p className="text-gray-500 mt-1">Week of {new Date(order.week_of).toLocaleDateString()}</p>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+              <AlertTriangle className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+              <p className="text-gray-700 font-medium text-lg">
+                {order.status === 'approved' ? 'This order has been approved' : 'This order is pending review'}
+              </p>
+              <p className="text-gray-500 mt-1 mb-6">Status: {order.status.replace('_', ' ')}</p>
+              <p className="text-gray-600 mb-4">Need to make changes? Withdraw it to edit and resubmit.</p>
+              <div className="flex justify-center gap-3">
+                <Link href="/orders">
+                  <Button variant="outline">Back to Orders</Button>
+                </Link>
+                <Button
+                  onClick={handleWithdraw}
+                  isLoading={withdrawOrder.isPending}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  Withdraw & Edit
+                </Button>
+              </div>
+            </div>
+
+            {/* Show items read-only */}
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-900">Order Items ({order.items?.length || 0})</h2>
+              </div>
+              {order.items && order.items.length > 0 && (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Unit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {order.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-6 py-4 font-medium text-gray-900">{item.item_name || item.custom_item_name}</td>
+                        <td className="px-6 py-4 text-center text-gray-700">{item.requested_quantity}</td>
+                        <td className="px-6 py-4 text-center text-gray-500">{item.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </DashboardLayout>
       </RoleGuard>
@@ -314,11 +397,9 @@ export default function EditOrderPage() {
                         onChange={(e) => setCustomUnit(e.target.value)}
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                       >
-                        <option value="unit">Unit</option>
-                        <option value="case">Case</option>
-                        <option value="box">Box</option>
-                        <option value="lb">Lb</option>
-                        <option value="each">Each</option>
+                        {UNITS.map(unit => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
                       </select>
                       <Button onClick={handleAddCustomItem} disabled={!customItemName.trim()}>
                         Add
@@ -357,7 +438,7 @@ export default function EditOrderPage() {
                         {item.par_level ?? '-'}
                       </td>
                       <td className="px-6 py-4 text-center text-sm">
-                        <span className={item.current_stock !== null && item.par_level !== null && item.current_stock < item.par_level ? 'text-yellow-600 font-medium' : 'text-gray-500'}>
+                        <span className={item.current_stock != null && item.par_level != null && item.current_stock < item.par_level ? 'text-yellow-600 font-medium' : 'text-gray-500'}>
                           {item.current_stock ?? '-'}
                         </span>
                       </td>
@@ -546,9 +627,19 @@ export default function EditOrderPage() {
 
           {/* Actions */}
           <div className="flex justify-between items-center">
-            <Link href="/orders">
-              <Button variant="outline">Cancel</Button>
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link href="/orders">
+                <Button variant="outline">Cancel</Button>
+              </Link>
+              {/* Auto-save indicator */}
+              <span className="text-sm text-gray-500">
+                {updateItem.isPending || addItem.isPending || deleteItem.isPending ? (
+                  <span className="text-amber-600">Saving...</span>
+                ) : (
+                  <span className="text-green-600">✓ Changes saved automatically</span>
+                )}
+              </span>
+            </div>
             <Button
               onClick={handleSubmit}
               disabled={!order.items || order.items.length === 0 || submitOrder.isPending || resubmitOrder.isPending}

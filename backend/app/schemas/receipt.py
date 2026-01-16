@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List, Any
 from datetime import datetime
 
@@ -56,8 +56,7 @@ class ReceiptResponse(ReceiptBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ReceiptWithDetails(ReceiptResponse):
@@ -164,8 +163,7 @@ class ReceiptCodeAliasResponse(BaseModel):
     item_name: Optional[str] = None
     supplier_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MatchReceiptItemRequest(BaseModel):

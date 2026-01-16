@@ -203,7 +203,7 @@ export default function OrderPurchaseListPage() {
             font-size: 14px;
             line-height: 1.4;
             padding: 20px;
-            color: #333;
+            color: #000;
           }
           .header {
             text-align: center;
@@ -213,7 +213,7 @@ export default function OrderPurchaseListPage() {
           }
           .header h1 { font-size: 28px; margin-bottom: 8px; }
           .header .property-name { font-size: 20px; font-weight: bold; color: #2563eb; margin-bottom: 8px; }
-          .header p { font-size: 14px; color: #333; }
+          .header p { font-size: 14px; color: #000; }
           .summary {
             display: flex;
             justify-content: space-between;
@@ -225,7 +225,7 @@ export default function OrderPurchaseListPage() {
           .summary-item {
             text-align: center;
           }
-          .summary-item .label { font-size: 12px; color: #333; }
+          .summary-item .label { font-size: 12px; color: #000; }
           .summary-item .value { font-size: 20px; font-weight: bold; }
           .supplier-section {
             margin-bottom: 20px;
@@ -276,7 +276,7 @@ export default function OrderPurchaseListPage() {
             padding-top: 12px;
             border-top: 1px solid #ccc;
             font-size: 12px;
-            color: #333;
+            color: #000;
             text-align: center;
           }
           @media print {

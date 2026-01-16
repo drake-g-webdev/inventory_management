@@ -1,19 +1,25 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CheckCircle2, Eye, Building2, ChevronDown, ChevronRight, Truck, ClipboardList, X } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
 import { usePendingReviewOrders, useReviewOrder, useOrder, useUpdateOrderItem } from '@/hooks/useOrders';
 import { useSuppliers } from '@/hooks/useSuppliers';
-import type { Order, OrderItem } from '@/types';
+import type { OrderItem } from '@/types';
 import toast from 'react-hot-toast';
+
+interface CategoryGroup {
+  categoryName: string;
+  items: OrderItem[];
+}
 
 interface SupplierGroup {
   supplierName: string;
   supplierId: number | null;
-  items: OrderItem[];
+  categories: CategoryGroup[];
+  totalItems: number;
 }
 
 export default function ReviewOrdersPage() {
@@ -29,7 +35,7 @@ export default function ReviewOrdersPage() {
   const [editedSuppliers, setEditedSuppliers] = useState<Record<number, number | null>>({});
   const [savingItems, setSavingItems] = useState<Set<number>>(new Set());
 
-  // Group items by supplier
+  // Group items by supplier, then by category within each supplier
   const supplierGroups = useMemo((): SupplierGroup[] => {
     if (!expandedOrder?.items) return [];
 
@@ -51,7 +57,36 @@ export default function ReviewOrdersPage() {
         if (b === 'No Supplier') return -1;
         return a.localeCompare(b);
       })
-      .map(([supplierName, data]) => ({ supplierName, supplierId: data.supplierId, items: data.items }));
+      .map(([supplierName, data]) => {
+        // Group items by category within each supplier
+        const categoryMap: Record<string, OrderItem[]> = {};
+        for (const item of data.items) {
+          const categoryName = item.category || 'Other';
+          if (!categoryMap[categoryName]) {
+            categoryMap[categoryName] = [];
+          }
+          categoryMap[categoryName].push(item);
+        }
+
+        // Sort categories alphabetically, but put "Other" at the end
+        const categories = Object.entries(categoryMap)
+          .sort(([a], [b]) => {
+            if (a === 'Other') return 1;
+            if (b === 'Other') return -1;
+            return a.localeCompare(b);
+          })
+          .map(([categoryName, items]) => ({
+            categoryName,
+            items: items.sort((a, b) => (a.item_name || '').localeCompare(b.item_name || ''))
+          }));
+
+        return {
+          supplierName,
+          supplierId: data.supplierId,
+          categories,
+          totalItems: data.items.length
+        };
+      });
   }, [expandedOrder?.items]);
 
   const toggleSupplier = (supplierName: string) => {
@@ -145,7 +180,7 @@ export default function ReviewOrdersPage() {
       await updateOrderItem.mutateAsync({
         orderId: expandedOrderId,
         itemId: item.id,
-        data: { quantity_approved: newQty },
+        data: { approved_quantity: newQty },
       });
       refetchOrder();
     } catch (error: any) {
@@ -166,14 +201,12 @@ export default function ReviewOrdersPage() {
 
   const toggleOrderExpansion = (orderId: number) => {
     if (expandedOrderId === orderId) {
-      // Collapse
       setExpandedOrderId(null);
       setReviewNotes('');
       setEditedQuantities({});
       setEditedSuppliers({});
       setExpandedSuppliers(new Set());
     } else {
-      // Expand
       setExpandedOrderId(orderId);
       setEditedQuantities({});
       setEditedSuppliers({});
@@ -202,7 +235,6 @@ export default function ReviewOrdersPage() {
               <div className="divide-y divide-gray-200">
                 {pendingOrders.map((order) => (
                   <div key={order.id}>
-                    {/* Order Row */}
                     <div className="flex items-center justify-between px-6 py-4 hover:bg-gray-50">
                       <div className="flex items-center gap-8">
                         <div className="flex items-center min-w-[200px]">
@@ -225,24 +257,22 @@ export default function ReviewOrdersPage() {
                         variant={expandedOrderId === order.id ? 'outline' : 'primary'}
                       >
                         {expandedOrderId === order.id ? (
-                          <>
+                          <React.Fragment>
                             <X className="h-4 w-4 mr-1" />
                             Close
-                          </>
+                          </React.Fragment>
                         ) : (
-                          <>
+                          <React.Fragment>
                             <Eye className="h-4 w-4 mr-1" />
                             Review
-                          </>
+                          </React.Fragment>
                         )}
                       </Button>
                     </div>
 
-                    {/* Expanded Order Details */}
                     {expandedOrderId === order.id && expandedOrder && (
                       <div className="bg-gray-50 border-t border-gray-200 px-6 py-6">
                         <div className="space-y-6">
-                          {/* Order Info Header */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-6">
                               <div>
@@ -271,7 +301,6 @@ export default function ReviewOrdersPage() {
                             </div>
                           )}
 
-                          {/* Expand/Collapse All buttons */}
                           <div className="flex justify-end gap-2">
                             <button
                               onClick={expandAll}
@@ -288,11 +317,9 @@ export default function ReviewOrdersPage() {
                             </button>
                           </div>
 
-                          {/* Supplier Groups */}
                           <div className="space-y-3">
                             {supplierGroups.map((group) => (
                               <div key={group.supplierName} className="border rounded-lg overflow-hidden bg-white">
-                                {/* Supplier Header */}
                                 <button
                                   onClick={() => toggleSupplier(group.supplierName)}
                                   className="w-full flex items-center justify-between px-4 py-3 bg-gray-100 hover:bg-gray-200 transition-colors"
@@ -300,7 +327,7 @@ export default function ReviewOrdersPage() {
                                   <div className="flex items-center gap-2">
                                     <Truck className="h-4 w-4 text-gray-500" />
                                     <span className="font-medium text-gray-900">{group.supplierName}</span>
-                                    <span className="text-sm text-gray-500">({group.items.length} items)</span>
+                                    <span className="text-sm text-gray-500">({group.totalItems} items)</span>
                                   </div>
                                   {expandedSuppliers.has(group.supplierName) ? (
                                     <ChevronDown className="h-5 w-5 text-gray-400" />
@@ -309,7 +336,6 @@ export default function ReviewOrdersPage() {
                                   )}
                                 </button>
 
-                                {/* Items Table */}
                                 {expandedSuppliers.has(group.supplierName) && (
                                   <div className="overflow-x-auto">
                                     <table className="min-w-full divide-y divide-gray-200">
@@ -324,69 +350,78 @@ export default function ReviewOrdersPage() {
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-gray-200">
-                                        {group.items.map((item) => {
-                                          const approvedQty = getApprovedQty(item);
-                                          const isModified = approvedQty !== item.requested_quantity;
-                                          const isSaving = savingItems.has(item.id);
-                                          const isLowStock = item.current_stock != null &&
-                                            item.par_level != null &&
-                                            item.current_stock < item.par_level;
-                                          const currentSupplierId = editedSuppliers[item.id] !== undefined
-                                            ? editedSuppliers[item.id]
-                                            : item.supplier_id;
-
-                                          return (
-                                            <tr key={item.id} className={isModified ? 'bg-yellow-50' : ''}>
-                                              <td className="px-4 py-2">
-                                                <span className="font-medium text-sm">{item.item_name || item.custom_item_name}</span>
-                                                {item.reviewer_notes && (
-                                                  <p className="text-xs text-orange-600 mt-1">{item.reviewer_notes}</p>
-                                                )}
-                                              </td>
-                                              <td className="px-4 py-2">
-                                                <select
-                                                  value={currentSupplierId ?? ''}
-                                                  onChange={(e) => handleSupplierChange(item, e.target.value)}
-                                                  disabled={isSaving}
-                                                  className={`w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 border-gray-300 ${isSaving ? 'opacity-50' : ''}`}
-                                                >
-                                                  <option value="">No Supplier</option>
-                                                  {suppliers.map((supplier) => (
-                                                    <option key={supplier.id} value={supplier.id}>
-                                                      {supplier.name}
-                                                    </option>
-                                                  ))}
-                                                </select>
-                                              </td>
-                                              <td className="px-4 py-2 text-center text-sm text-gray-600">
-                                                {item.par_level ?? '-'}
-                                              </td>
-                                              <td className={`px-4 py-2 text-center text-sm ${isLowStock ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
-                                                {item.current_stock ?? '-'}
-                                              </td>
-                                              <td className="px-4 py-2 text-center text-sm text-gray-900">
-                                                {item.requested_quantity} {item.unit}
-                                              </td>
-                                              <td className="px-4 py-2 text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                  <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="1"
-                                                    value={approvedQty}
-                                                    onChange={(e) => handleQtyChange(item.id, e.target.value)}
-                                                    onBlur={() => handleQtyBlur(item)}
-                                                    disabled={isSaving}
-                                                    className={`w-16 px-2 py-1 text-center text-sm border rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                                                      isModified ? 'border-orange-300 bg-orange-50' : 'border-gray-300'
-                                                    } ${isSaving ? 'opacity-50' : ''}`}
-                                                  />
-                                                  <span className="text-xs text-gray-500">{item.unit}</span>
-                                                </div>
+                                        {group.categories.map((category) => (
+                                          <React.Fragment key={category.categoryName}>
+                                            <tr className="bg-gray-700">
+                                              <td colSpan={6} className="px-4 py-2 text-sm font-semibold text-white">
+                                                {category.categoryName}
                                               </td>
                                             </tr>
-                                          );
-                                        })}
+                                            {category.items.map((item) => {
+                                              const approvedQty = getApprovedQty(item);
+                                              const isModified = approvedQty !== item.requested_quantity;
+                                              const isSaving = savingItems.has(item.id);
+                                              const isLowStock = item.current_stock != null &&
+                                                item.par_level != null &&
+                                                item.current_stock < item.par_level;
+                                              const currentSupplierId = editedSuppliers[item.id] !== undefined
+                                                ? editedSuppliers[item.id]
+                                                : item.supplier_id;
+
+                                              return (
+                                                <tr key={item.id} className={isModified ? 'bg-yellow-50' : ''}>
+                                                  <td className="px-4 py-2">
+                                                    <span className="font-medium text-sm">{item.item_name || item.custom_item_name}</span>
+                                                    {item.reviewer_notes && (
+                                                      <p className="text-xs text-orange-600 mt-1">{item.reviewer_notes}</p>
+                                                    )}
+                                                  </td>
+                                                  <td className="px-4 py-2">
+                                                    <select
+                                                      value={currentSupplierId ?? ''}
+                                                      onChange={(e) => handleSupplierChange(item, e.target.value)}
+                                                      disabled={isSaving}
+                                                      className={`w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 border-gray-300 ${isSaving ? 'opacity-50' : ''}`}
+                                                    >
+                                                      <option value="">No Supplier</option>
+                                                      {suppliers.map((supplier) => (
+                                                        <option key={supplier.id} value={supplier.id}>
+                                                          {supplier.name}
+                                                        </option>
+                                                      ))}
+                                                    </select>
+                                                  </td>
+                                                  <td className="px-4 py-2 text-center text-sm text-gray-600">
+                                                    {item.par_level ?? '-'}
+                                                  </td>
+                                                  <td className={`px-4 py-2 text-center text-sm ${isLowStock ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                                                    {item.current_stock ?? '-'}
+                                                  </td>
+                                                  <td className="px-4 py-2 text-center text-sm text-gray-900">
+                                                    {item.requested_quantity} {item.unit}
+                                                  </td>
+                                                  <td className="px-4 py-2 text-center">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                      <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="1"
+                                                        value={approvedQty}
+                                                        onChange={(e) => handleQtyChange(item.id, e.target.value)}
+                                                        onBlur={() => handleQtyBlur(item)}
+                                                        disabled={isSaving}
+                                                        className={`w-16 px-2 py-1 text-center text-sm border rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                                                          isModified ? 'border-orange-300 bg-orange-50' : 'border-gray-300'
+                                                        } ${isSaving ? 'opacity-50' : ''}`}
+                                                      />
+                                                      <span className="text-xs text-gray-500">{item.unit}</span>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </React.Fragment>
+                                        ))}
                                       </tbody>
                                     </table>
                                   </div>
@@ -395,7 +430,6 @@ export default function ReviewOrdersPage() {
                             ))}
                           </div>
 
-                          {/* Review notes */}
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
                             <textarea
@@ -407,7 +441,6 @@ export default function ReviewOrdersPage() {
                             />
                           </div>
 
-                          {/* Actions */}
                           <div className="flex justify-end gap-3">
                             <Button variant="outline" onClick={() => toggleOrderExpansion(order.id)}>Cancel</Button>
                             <Button

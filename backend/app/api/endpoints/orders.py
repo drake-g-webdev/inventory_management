@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime
 import uuid
@@ -29,7 +29,8 @@ from app.schemas.order import (
     OrderSubmitRequest, OrderReviewRequest, OrderReceiveRequest,
     AutoGenerateOrderRequest, OrderSummary, PropertyOrderSummary,
     SupplierPurchaseList, SupplierPurchaseGroup, SupplierPurchaseItem,
-    FlaggedItemResponse, FlaggedItemsList
+    FlaggedItemResponse, FlaggedItemsList,
+    UnreceivedItemResponse, UnreceivedItemsList, DismissShortageRequest
 )
 
 logger = logging.getLogger(__name__)
@@ -52,14 +53,28 @@ def calculate_order_total(order: Order) -> float:
     return total
 
 
+def _get_order_query_with_eager_loading(db: Session):
+    """
+    Create a query with eager loading to prevent N+1 queries.
+    Loads: items, inventory_item, supplier, created_by_user, reviewed_by_user, camp_property
+    """
+    return db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.inventory_item),
+        joinedload(Order.items).joinedload(OrderItem.supplier),
+        joinedload(Order.created_by_user),
+        joinedload(Order.reviewed_by_user),
+        joinedload(Order.camp_property)
+    )
+
+
 # ============== ORDER CRUD ==============
 
 @router.get("", response_model=List[OrderWithItems])
 def list_orders(
     property_id: Optional[int] = None,
     status: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=500, description="Max records to return"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -69,7 +84,8 @@ def list_orders(
     elif current_user.role == UserRole.CAMP_WORKER.value:
         property_id = current_user.property_id
 
-    query = db.query(Order)
+    # Use eager loading to prevent N+1 queries
+    query = _get_order_query_with_eager_loading(db)
     if property_id:
         query = query.filter(Order.property_id == property_id)
     if status:
@@ -91,7 +107,8 @@ def list_pending_review_orders(
     db: Session = Depends(get_db)
 ):
     """List orders pending supervisor review"""
-    orders = db.query(Order).filter(
+    # Use eager loading to prevent N+1 queries
+    orders = _get_order_query_with_eager_loading(db).filter(
         Order.status.in_([OrderStatus.SUBMITTED.value, OrderStatus.UNDER_REVIEW.value])
     ).order_by(Order.submitted_at).all()
 
@@ -108,7 +125,8 @@ def list_ready_to_order(
     db: Session = Depends(get_db)
 ):
     """List approved orders ready for purchasing team"""
-    orders = db.query(Order).filter(
+    # Use eager loading to prevent N+1 queries
+    orders = _get_order_query_with_eager_loading(db).filter(
         Order.status == OrderStatus.APPROVED.value
     ).order_by(Order.approved_at).all()
 
@@ -138,22 +156,44 @@ def get_supplier_purchase_list(
         OrderStatus.RECEIVED.value
     ]
 
+    # Build query with eager loading to prevent N+1 queries
+    # Loads: items, items.inventory_item, items.supplier, camp_property
+    base_query = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.inventory_item),
+        joinedload(Order.items).joinedload(OrderItem.supplier),
+        joinedload(Order.camp_property)
+    )
+
     # Parse order IDs if provided
     if order_ids:
         ids = [int(id.strip()) for id in order_ids.split(",") if id.strip()]
         # When viewing specific orders, allow any viewable status
-        orders = db.query(Order).filter(
+        orders = base_query.filter(
             Order.id.in_(ids),
             Order.status.in_(viewable_statuses)
         ).all()
     else:
         # When getting all orders (for aggregated purchase list), only show approved
-        orders = db.query(Order).filter(
+        orders = base_query.filter(
             Order.status == OrderStatus.APPROVED.value
         ).all()
 
     if not orders:
         return SupplierPurchaseList(suppliers=[], order_ids=[], total_orders=0, grand_total=0.0)
+
+    # Pre-load all suppliers that might be referenced (avoids N+1 queries)
+    supplier_ids = set()
+    for order in orders:
+        for item in order.items:
+            if item.supplier_id:
+                supplier_ids.add(item.supplier_id)
+            elif item.inventory_item and item.inventory_item.supplier_id:
+                supplier_ids.add(item.inventory_item.supplier_id)
+
+    suppliers_map = {}
+    if supplier_ids:
+        suppliers = db.query(Supplier).filter(Supplier.id.in_(supplier_ids)).all()
+        suppliers_map = {s.id: s for s in suppliers}
 
     # Group items by supplier
     supplier_groups: dict = {}  # supplier_id -> SupplierPurchaseGroup
@@ -163,20 +203,19 @@ def get_supplier_purchase_list(
     for order in orders:
         order_id_list.append(order.id)
 
-        # Get property name
-        prop = db.query(Property).filter(Property.id == order.property_id).first()
-        property_name = prop.name if prop else "Unknown Property"
+        # Use eagerly loaded camp_property (no additional query)
+        property_name = order.camp_property.name if order.camp_property else "Unknown Property"
 
         for item in order.items:
-            # Determine supplier
+            # Determine supplier (using eagerly loaded relationships)
             supplier_id = item.supplier_id
             if supplier_id is None and item.inventory_item and item.inventory_item.supplier_id:
                 supplier_id = item.inventory_item.supplier_id
 
-            # Get or create supplier group
+            # Get or create supplier group (using pre-loaded suppliers_map)
             if supplier_id not in supplier_groups:
                 if supplier_id:
-                    supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
+                    supplier = suppliers_map.get(supplier_id)
                     supplier_groups[supplier_id] = SupplierPurchaseGroup(
                         supplier_id=supplier_id,
                         supplier_name=supplier.name if supplier else "Unknown Supplier",
@@ -207,6 +246,11 @@ def get_supplier_purchase_list(
 
             # Calculate quantity and price
             quantity = item.approved_quantity if item.approved_quantity is not None else item.requested_quantity
+
+            # Skip items with 0 or no approved quantity
+            if quantity is None or quantity <= 0:
+                continue
+
             unit_price = item.unit_price or 0
             line_total = quantity * unit_price
 
@@ -252,7 +296,8 @@ def list_my_orders(
     if not current_user.property_id:
         return []
 
-    orders = db.query(Order).filter(
+    # Use eager loading to prevent N+1 queries
+    orders = _get_order_query_with_eager_loading(db).filter(
         Order.property_id == current_user.property_id
     ).order_by(Order.created_at.desc()).all()
 
@@ -275,37 +320,42 @@ def get_flagged_items(
     """
     Get all items that were flagged with issues during receiving.
     For purchasing team dashboard to see quality/delivery issues.
+    Shows items as soon as they're flagged (saved), not just when finalized.
     Example: 'Yukon River Camp flagged Cilantro: "Cilantro was wilted and slimy when it arrived"'
     """
-    # Query order items that have issues
-    query = db.query(OrderItem).filter(
-        OrderItem.has_issue == True,
-        OrderItem.is_received == True
+    # Query order items with eager loading to prevent N+1 queries
+    # Loads: order, order.camp_property, order.created_by_user, inventory_item
+    # Shows flagged items regardless of is_received status (appears on save, not just finalize)
+    query = db.query(OrderItem).options(
+        joinedload(OrderItem.order).joinedload(Order.camp_property),
+        joinedload(OrderItem.order).joinedload(Order.created_by_user),
+        joinedload(OrderItem.inventory_item)
+    ).filter(
+        OrderItem.has_issue == True
     )
 
     # Filter by property if specified
     if property_id:
-        query = query.join(Order).filter(Order.property_id == property_id)
+        query = query.join(Order, OrderItem.order_id == Order.id).filter(Order.property_id == property_id)
 
     flagged_items = query.order_by(OrderItem.updated_at.desc()).all()
 
     result = []
     for item in flagged_items:
-        # Get related order and property info
-        order = db.query(Order).filter(Order.id == item.order_id).first()
+        # Use eagerly loaded relationships (no additional queries)
+        order = item.order
         if not order:
             continue
 
-        prop = db.query(Property).filter(Property.id == order.property_id).first()
-        property_name = prop.name if prop else "Unknown Property"
+        property_name = order.camp_property.name if order.camp_property else "Unknown Property"
 
-        # Get item name
+        # Get item name from eagerly loaded inventory_item
         if item.inventory_item:
             item_name = item.inventory_item.name
         else:
             item_name = item.custom_item_name or "Unknown Item"
 
-        # Get who created the order (who flagged the item)
+        # Get who created the order (who flagged the item) - eagerly loaded
         flagged_by = None
         if order.created_by_user:
             flagged_by = order.created_by_user.full_name or order.created_by_user.email
@@ -358,6 +408,265 @@ def resolve_flagged_item(
     return {"message": "Issue resolved successfully", "item_id": item_id}
 
 
+# ============== UNRECEIVED ITEMS FROM PREVIOUS ORDERS ==============
+
+@router.get("/unreceived-items", response_model=UnreceivedItemsList)
+def get_all_unreceived_items(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all items from previous orders that were not received or had quantity shortages.
+    For purchasing team to see all unreceived items across all properties.
+    """
+    # Query order items with eager loading - no property filter
+    query = db.query(OrderItem).options(
+        joinedload(OrderItem.order).joinedload(Order.camp_property),
+        joinedload(OrderItem.inventory_item),
+        joinedload(OrderItem.supplier)
+    ).join(Order).filter(
+        Order.status.in_([OrderStatus.RECEIVED.value, OrderStatus.PARTIALLY_RECEIVED.value])
+    )
+
+    items = query.order_by(Order.week_of.desc()).all()
+
+    # Pre-load all suppliers that might be needed (fix N+1 query)
+    supplier_ids_needed = set()
+    for item in items:
+        if not item.supplier and item.inventory_item and item.inventory_item.supplier_id:
+            supplier_ids_needed.add(item.inventory_item.supplier_id)
+
+    suppliers_map = {}
+    if supplier_ids_needed:
+        suppliers = db.query(Supplier).filter(Supplier.id.in_(supplier_ids_needed)).all()
+        suppliers_map = {s.id: s for s in suppliers}
+
+    result = []
+    total_shortage_value = 0.0
+
+    for item in items:
+        order = item.order
+        approved_qty = item.approved_quantity or item.requested_quantity
+        received_qty = item.received_quantity or 0
+        shortage = approved_qty - received_qty
+
+        if shortage > 0:
+            if item.inventory_item:
+                item_name = item.inventory_item.name
+            else:
+                item_name = item.custom_item_name or "Unknown Item"
+
+            supplier_name = None
+            supplier_id = None
+            if item.supplier:
+                supplier_name = item.supplier.name
+                supplier_id = item.supplier.id
+            elif item.inventory_item and item.inventory_item.supplier_id:
+                supplier = suppliers_map.get(item.inventory_item.supplier_id)
+                if supplier:
+                    supplier_name = supplier.name
+                    supplier_id = supplier.id
+
+            unit_price = item.unit_price or 0
+            shortage_value = shortage * unit_price
+            total_shortage_value += shortage_value
+
+            # Get property info from order
+            prop = order.camp_property
+            prop_id = prop.id if prop else order.property_id
+            prop_name = prop.name if prop else None
+
+            result.append(UnreceivedItemResponse(
+                item_id=item.id,
+                inventory_item_id=item.inventory_item_id,
+                item_name=item_name,
+                order_id=order.id,
+                order_number=order.order_number,
+                property_id=prop_id,
+                property_name=prop_name,
+                week_of=order.week_of,
+                approved_quantity=approved_qty,
+                received_quantity=received_qty,
+                shortage=shortage,
+                unit=item.unit,
+                unit_price=unit_price,
+                supplier_id=supplier_id,
+                supplier_name=supplier_name,
+                has_issue=item.has_issue,
+                issue_description=item.issue_description
+            ))
+
+    return UnreceivedItemsList(
+        items=result,
+        total_count=len(result),
+        total_shortage_value=total_shortage_value
+    )
+
+
+@router.get("/unreceived-items/{property_id}", response_model=UnreceivedItemsList)
+def get_unreceived_items(
+    property_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get items from previous orders that were not received or had quantity shortages.
+    Used when creating new orders to carry forward unreceived items.
+
+    Returns AGGREGATED items by inventory_item_id where:
+    - Order is in 'received' or 'partially_received' status
+    - Item was not received OR received less than approved quantity
+    - Shortage has not been dismissed by user
+    """
+    require_property_access(property_id, current_user)
+
+    # Query order items with eager loading, excluding dismissed shortages
+    query = db.query(OrderItem).options(
+        joinedload(OrderItem.order),
+        joinedload(OrderItem.inventory_item),
+        joinedload(OrderItem.supplier)
+    ).join(Order).filter(
+        Order.property_id == property_id,
+        Order.status.in_([OrderStatus.RECEIVED.value, OrderStatus.PARTIALLY_RECEIVED.value]),
+        OrderItem.shortage_dismissed == False  # Exclude dismissed shortages
+    )
+
+    items = query.order_by(Order.week_of.desc()).all()
+
+    # Get property name once
+    prop = db.query(Property).filter(Property.id == property_id).first()
+    prop_name = prop.name if prop else None
+
+    # Aggregate shortages by inventory_item_id (or custom_item_name for custom items)
+    aggregated: dict = {}  # key: inventory_item_id or f"custom:{name}"
+    total_shortage_value = 0.0
+
+    for item in items:
+        order = item.order
+        approved_qty = item.approved_quantity or item.requested_quantity
+        received_qty = item.received_quantity or 0
+        shortage = approved_qty - received_qty
+
+        if shortage <= 0:
+            continue
+
+        # Determine aggregation key
+        if item.inventory_item_id:
+            key = item.inventory_item_id
+            item_name = item.inventory_item.name if item.inventory_item else "Unknown Item"
+        else:
+            # For custom items, use the name as key
+            item_name = item.custom_item_name or "Unknown Item"
+            key = f"custom:{item_name.lower()}"
+
+        # Get supplier info
+        supplier_name = None
+        supplier_id = None
+        if item.supplier:
+            supplier_name = item.supplier.name
+            supplier_id = item.supplier.id
+        elif item.inventory_item and item.inventory_item.supplier_id:
+            supplier = db.query(Supplier).filter(Supplier.id == item.inventory_item.supplier_id).first()
+            if supplier:
+                supplier_name = supplier.name
+                supplier_id = supplier.id
+
+        unit_price = item.unit_price or 0
+        shortage_value = shortage * unit_price
+        total_shortage_value += shortage_value
+
+        if key not in aggregated:
+            aggregated[key] = {
+                'inventory_item_id': item.inventory_item_id,
+                'item_name': item_name,
+                'total_shortage': 0.0,
+                'unit': item.unit,
+                'unit_price': unit_price,
+                'supplier_id': supplier_id,
+                'supplier_name': supplier_name,
+                'source_order_item_ids': [],
+                'latest_order_number': order.order_number,
+                'latest_week_of': order.week_of,
+                'order_count': 0
+            }
+
+        agg = aggregated[key]
+        agg['total_shortage'] += shortage
+        agg['source_order_item_ids'].append(item.id)
+        agg['order_count'] += 1
+        # Keep the most recent order info (items are sorted by week_of desc)
+        if not agg['latest_week_of'] or (order.week_of and order.week_of > agg['latest_week_of']):
+            agg['latest_order_number'] = order.order_number
+            agg['latest_week_of'] = order.week_of
+
+    # Build result list
+    result = [
+        UnreceivedItemResponse(
+            inventory_item_id=agg['inventory_item_id'],
+            item_name=agg['item_name'],
+            total_shortage=agg['total_shortage'],
+            unit=agg['unit'],
+            unit_price=agg['unit_price'],
+            supplier_id=agg['supplier_id'],
+            supplier_name=agg['supplier_name'],
+            property_id=property_id,
+            property_name=prop_name,
+            source_order_item_ids=agg['source_order_item_ids'],
+            latest_order_number=agg['latest_order_number'],
+            latest_week_of=agg['latest_week_of'],
+            order_count=agg['order_count']
+        )
+        for agg in aggregated.values()
+    ]
+
+    # Sort by total shortage descending
+    result.sort(key=lambda x: x.total_shortage, reverse=True)
+
+    return UnreceivedItemsList(
+        items=result,
+        total_count=len(result),
+        total_shortage_value=total_shortage_value
+    )
+
+
+@router.post("/dismiss-shortage", status_code=status.HTTP_200_OK)
+def dismiss_shortage(
+    request: DismissShortageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Dismiss shortages so they no longer appear in the unreceived items list.
+    Used when a shortage has been resolved through other means (found in stock,
+    no longer needed, etc.)
+    """
+    if not request.order_item_ids:
+        raise HTTPException(status_code=400, detail="No order item IDs provided")
+
+    # Get all order items and verify access
+    items = db.query(OrderItem).options(
+        joinedload(OrderItem.order)
+    ).filter(OrderItem.id.in_(request.order_item_ids)).all()
+
+    if not items:
+        raise HTTPException(status_code=404, detail="No order items found")
+
+    # Verify user has access to the property for each item
+    for item in items:
+        require_property_access(item.order.property_id, current_user)
+
+    # Mark all items as dismissed
+    dismissed_count = 0
+    for item in items:
+        if not item.shortage_dismissed:
+            item.shortage_dismissed = True
+            dismissed_count += 1
+
+    db.commit()
+
+    return {"message": f"Dismissed {dismissed_count} shortage(s)", "dismissed_count": dismissed_count}
+
+
 @router.get("/{order_id}", response_model=OrderWithItems)
 def get_order(
     order_id: int,
@@ -365,7 +674,8 @@ def get_order(
     db: Session = Depends(get_db)
 ):
     """Get order details with items"""
-    order = db.query(Order).filter(Order.id == order_id).first()
+    # Use eager loading to prevent N+1 queries
+    order = _get_order_query_with_eager_loading(db).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -375,14 +685,19 @@ def get_order(
 
 
 def _build_order_with_items(order: Order, db: Session) -> OrderWithItems:
-    """Helper to build order response with items"""
+    """Helper to build order response with items.
+    Note: Expects order to be loaded with eager loading via _get_order_query_with_eager_loading()
+    """
     order_data = OrderWithItems.model_validate(order)
 
-    # Get property name
-    prop = db.query(Property).filter(Property.id == order.property_id).first()
-    order_data.property_name = prop.name if prop else None
+    # Use eagerly loaded camp_property (falls back to query if not loaded)
+    if order.camp_property:
+        order_data.property_name = order.camp_property.name
+    else:
+        prop = db.query(Property).filter(Property.id == order.property_id).first()
+        order_data.property_name = prop.name if prop else None
 
-    # Get user names
+    # Get user names from eagerly loaded relationships
     if order.created_by_user:
         order_data.created_by_name = order.created_by_user.full_name or order.created_by_user.email
     if order.reviewed_by_user:
@@ -396,13 +711,15 @@ def _build_order_with_items(order: Order, db: Session) -> OrderWithItems:
     for item in order.items:
         item_detail = OrderItemWithDetails.model_validate(item)
 
-        # Get item name and inventory data
+        # Get item name, category, and inventory data
         if item.inventory_item:
             item_detail.item_name = item.inventory_item.name
+            item_detail.category = item.inventory_item.category
             item_detail.par_level = item.inventory_item.par_level
             item_detail.current_stock = item.inventory_item.current_stock
         else:
             item_detail.item_name = item.custom_item_name or "Custom Item"
+            item_detail.category = None
             item_detail.par_level = None
             item_detail.current_stock = None
 
@@ -462,10 +779,39 @@ def create_order(
 
     # Add items
     for item_data in order_data.items:
+        inventory_item_id = item_data.inventory_item_id
+
+        # For custom items, create a non-recurring inventory item so it's searchable next time
+        if inventory_item_id is None and item_data.custom_item_name:
+            # Check if a similar non-recurring item already exists for this property
+            existing_item = db.query(InventoryItem).filter(
+                InventoryItem.property_id == order_data.property_id,
+                InventoryItem.name.ilike(item_data.custom_item_name.strip()),
+                InventoryItem.is_recurring == False
+            ).first()
+
+            if existing_item:
+                # Use the existing item
+                inventory_item_id = existing_item.id
+            else:
+                # Create a new non-recurring inventory item
+                new_inv_item = InventoryItem(
+                    property_id=order_data.property_id,
+                    name=item_data.custom_item_name.strip(),
+                    unit=item_data.unit or "Each",
+                    is_recurring=False,  # Non-recurring/one-off item
+                    is_active=True,
+                    current_stock=0
+                )
+                db.add(new_inv_item)
+                db.flush()  # Get the ID
+                inventory_item_id = new_inv_item.id
+                logger.info(f"Created non-recurring inventory item '{new_inv_item.name}' (ID: {new_inv_item.id}) for property {order_data.property_id}")
+
         order_item = OrderItem(
             order_id=order.id,
-            inventory_item_id=item_data.inventory_item_id,
-            custom_item_name=item_data.custom_item_name,
+            inventory_item_id=inventory_item_id,
+            custom_item_name=item_data.custom_item_name if inventory_item_id is None else None,
             custom_item_description=item_data.custom_item_description,
             supplier_id=item_data.supplier_id,
             flag=item_data.flag.value if item_data.flag else OrderItemFlag.MANUAL.value,
@@ -824,6 +1170,35 @@ def submit_order(
     return order
 
 
+@router.post("/{order_id}/withdraw", response_model=OrderResponse)
+def withdraw_order(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Withdraw order from review back to draft status (camp worker or supervisor)"""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    require_property_access(order.property_id, current_user)
+
+    # Allow withdrawal from submitted, under_review, or approved status
+    allowed_statuses = [OrderStatus.SUBMITTED.value, OrderStatus.UNDER_REVIEW.value, OrderStatus.APPROVED.value]
+    if order.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot withdraw order with status '{order.status}'. Order must be pending review or approved."
+        )
+
+    order.status = OrderStatus.DRAFT.value
+    order.submitted_at = None
+
+    db.commit()
+    db.refresh(order)
+    return order
+
+
 @router.post("/{order_id}/review", response_model=OrderResponse)
 def review_order(
     order_id: int,
@@ -1019,14 +1394,18 @@ def unmark_order_ordered(
     return order
 
 
-@router.post("/{order_id}/receive", response_model=OrderResponse)
-def receive_order_items(
+@router.post("/{order_id}/add-receiving-item", response_model=OrderResponse)
+def add_receiving_item(
     order_id: int,
-    request: OrderReceiveRequest,
+    item_data: OrderItemCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Mark items as received"""
+    """
+    Add an item to an order during receiving.
+    Used for late shipments that arrive after the original order was placed.
+    Only works for orders in 'ordered' or 'partially_received' status.
+    """
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1034,23 +1413,132 @@ def receive_order_items(
     require_property_access(order.property_id, current_user)
 
     if order.status not in [OrderStatus.ORDERED.value, OrderStatus.PARTIALLY_RECEIVED.value]:
+        raise HTTPException(
+            status_code=400,
+            detail="Can only add items to orders that are being received (ordered or partially_received status)"
+        )
+
+    # Get unit and price from inventory item if not provided
+    unit = item_data.unit
+    unit_price = item_data.unit_price
+    supplier_id = item_data.supplier_id
+    inventory_item_id = item_data.inventory_item_id
+
+    if inventory_item_id:
+        inv_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+        if inv_item:
+            if not unit:
+                unit = inv_item.unit
+            if not unit_price:
+                unit_price = inv_item.unit_price
+            if not supplier_id:
+                supplier_id = inv_item.supplier_id
+    elif item_data.custom_item_name:
+        # For custom items, create a non-recurring inventory item so it's searchable next time
+        existing_item = db.query(InventoryItem).filter(
+            InventoryItem.property_id == order.property_id,
+            InventoryItem.name.ilike(item_data.custom_item_name.strip()),
+            InventoryItem.is_recurring == False
+        ).first()
+
+        if existing_item:
+            inventory_item_id = existing_item.id
+        else:
+            new_inv_item = InventoryItem(
+                property_id=order.property_id,
+                name=item_data.custom_item_name.strip(),
+                unit=unit or "Each",
+                is_recurring=False,
+                is_active=True,
+                current_stock=0
+            )
+            db.add(new_inv_item)
+            db.flush()
+            inventory_item_id = new_inv_item.id
+            logger.info(f"Created non-recurring inventory item '{new_inv_item.name}' (ID: {new_inv_item.id}) during receiving")
+
+    # Create the order item - use flag 'manual' since this is a late addition
+    order_item = OrderItem(
+        order_id=order.id,
+        inventory_item_id=inventory_item_id,
+        custom_item_name=item_data.custom_item_name if inventory_item_id is None else None,
+        custom_item_description=item_data.custom_item_description,
+        supplier_id=supplier_id,
+        flag=OrderItemFlag.MANUAL.value,
+        requested_quantity=item_data.requested_quantity,
+        approved_quantity=item_data.requested_quantity,  # Auto-approve since order is already approved
+        unit=unit,
+        unit_price=unit_price,
+        camp_notes=item_data.camp_notes
+    )
+    db.add(order_item)
+    db.commit()
+
+    # Recalculate order total
+    order.estimated_total = calculate_order_total(order)
+    db.commit()
+    db.refresh(order)
+
+    return order
+
+
+@router.post("/{order_id}/receive", response_model=OrderResponse)
+def receive_order_items(
+    order_id: int,
+    request: OrderReceiveRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Mark items as received with proper error handling and transaction safety.
+
+    When finalize=False (default): Saves receiving progress without updating inventory.
+    When finalize=True: Marks items as received, updates inventory, and sends notifications.
+    """
+    # Use eager loading for order and items
+    order = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.inventory_item),
+        joinedload(Order.camp_property)
+    ).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    require_property_access(order.property_id, current_user)
+
+    # Allow receiving for ordered, partially_received, and received orders (for edits)
+    if order.status not in [OrderStatus.ORDERED.value, OrderStatus.PARTIALLY_RECEIVED.value, OrderStatus.RECEIVED.value]:
         raise HTTPException(status_code=400, detail="Order not ready for receiving")
 
-    # Track flagged items for notification
+    # Validate all item IDs exist before processing (fail-fast)
+    order_item_ids = {item.id for item in order.items}
+    invalid_item_ids = [item_req.item_id for item_req in request.items if item_req.item_id not in order_item_ids]
+    if invalid_item_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Order items not found: {invalid_item_ids}. These items do not belong to this order."
+        )
+
+    # Create a map for quick item lookup
+    item_map = {item.id: item for item in order.items}
+
+    # Track flagged items for notification (only when finalizing)
     flagged_items = []
 
+    # Process all items (we've validated they all exist)
     for item_req in request.items:
-        item = db.query(OrderItem).filter(
-            OrderItem.id == item_req.item_id,
-            OrderItem.order_id == order_id
-        ).first()
-        if item:
-            item.received_quantity = item_req.received_quantity
+        item = item_map[item_req.item_id]
+        old_received_quantity = item.received_quantity or 0
+        was_already_received = item.is_received
+
+        item.received_quantity = item_req.received_quantity
+        item.has_issue = item_req.has_issue
+        item.issue_description = item_req.issue_description
+        item.issue_photo_url = item_req.issue_photo_url
+        item.receiving_notes = item_req.receiving_notes
+
+        # Only mark as received and update inventory when finalizing
+        if request.finalize:
             item.is_received = True
-            item.has_issue = item_req.has_issue
-            item.issue_description = item_req.issue_description
-            item.issue_photo_url = item_req.issue_photo_url
-            item.receiving_notes = item_req.receiving_notes
 
             # Track flagged items
             if item_req.has_issue:
@@ -1063,24 +1551,31 @@ def receive_order_items(
 
             # Update inventory stock if linked to inventory item
             if item.inventory_item:
-                item.inventory_item.current_stock = (item.inventory_item.current_stock or 0) + item_req.received_quantity
+                if was_already_received:
+                    # Item was already received - adjust inventory by the difference
+                    quantity_difference = item_req.received_quantity - old_received_quantity
+                    item.inventory_item.current_stock = (item.inventory_item.current_stock or 0) + quantity_difference
+                else:
+                    # New receiving - add full quantity
+                    item.inventory_item.current_stock = (item.inventory_item.current_stock or 0) + item_req.received_quantity
 
-    # Check if all items received
-    all_received = all(i.is_received for i in order.items)
-    if all_received:
-        order.status = OrderStatus.RECEIVED.value
-        order.received_at = datetime.utcnow()
-    else:
-        order.status = OrderStatus.PARTIALLY_RECEIVED.value
+    # Only update order status when finalizing
+    if request.finalize:
+        # Check if all items received
+        all_received = all(i.is_received for i in order.items)
+        if all_received:
+            order.status = OrderStatus.RECEIVED.value
+            order.received_at = datetime.utcnow()
+        else:
+            order.status = OrderStatus.PARTIALLY_RECEIVED.value
 
     db.commit()
     db.refresh(order)
 
-    # Send notifications if items were flagged
-    if flagged_items:
-        # Get property name
-        prop = db.query(Property).filter(Property.id == order.property_id).first()
-        property_name = prop.name if prop else "Unknown Property"
+    # Send notifications if items were flagged (only when finalizing)
+    if request.finalize and flagged_items:
+        # Use eagerly loaded property name
+        property_name = order.camp_property.name if order.camp_property else "Unknown Property"
 
         # Get purchasing team emails
         purchasing_users = db.query(User).filter(

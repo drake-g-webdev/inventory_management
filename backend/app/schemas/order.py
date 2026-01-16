@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from app.models.order import OrderStatus, OrderItemFlag
@@ -34,8 +34,7 @@ class OrderItemUpdate(BaseModel):
     issue_description: Optional[str] = None
     supplier_id: Optional[int] = None  # Allow changing supplier during review
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class OrderItemResponse(OrderItemBase):
@@ -51,12 +50,12 @@ class OrderItemResponse(OrderItemBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderItemWithDetails(OrderItemResponse):
     item_name: str
+    category: Optional[str] = None
     supplier_name: Optional[str] = None
     par_level: Optional[float] = None
     current_stock: Optional[float] = None
@@ -101,8 +100,7 @@ class OrderResponse(BaseModel):
     updated_at: Optional[datetime] = None
     item_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderWithItems(OrderResponse):
@@ -140,6 +138,7 @@ class OrderReceiveItemRequest(BaseModel):
 
 class OrderReceiveRequest(BaseModel):
     items: List[OrderReceiveItemRequest]
+    finalize: bool = False  # When False, saves progress without updating inventory
 
 
 # Auto-generate order from low stock
@@ -222,3 +221,32 @@ class FlaggedItemResponse(BaseModel):
 class FlaggedItemsList(BaseModel):
     items: List[FlaggedItemResponse] = []
     total_count: int = 0
+
+
+# Unreceived items from previous orders (aggregated by inventory item)
+class UnreceivedItemResponse(BaseModel):
+    inventory_item_id: Optional[int] = None
+    item_name: str
+    total_shortage: float  # Sum of shortages across all orders
+    unit: Optional[str] = None
+    unit_price: Optional[float] = None
+    supplier_id: Optional[int] = None
+    supplier_name: Optional[str] = None
+    property_id: Optional[int] = None
+    property_name: Optional[str] = None
+    # Source order item IDs for dismissing
+    source_order_item_ids: List[int] = []
+    # Most recent order info
+    latest_order_number: Optional[str] = None
+    latest_week_of: Optional[datetime] = None
+    order_count: int = 1  # How many orders this shortage spans
+
+
+class UnreceivedItemsList(BaseModel):
+    items: List[UnreceivedItemResponse] = []
+    total_count: int = 0
+    total_shortage_value: float = 0.0
+
+
+class DismissShortageRequest(BaseModel):
+    order_item_ids: List[int]

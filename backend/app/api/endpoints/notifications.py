@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 @router.get("", response_model=NotificationList)
 def get_my_notifications(
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=200, description="Max notifications to return"),
     unread_only: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)

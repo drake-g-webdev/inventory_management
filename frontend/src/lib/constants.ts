@@ -1,0 +1,44 @@
+// Shared constants used across the application
+
+// Standard units of measure - used for inventory items, orders, etc.
+export const UNITS = [
+  'Each',
+  'Lb',
+  'Oz',
+  'Gallon',
+  'Quart',
+  'Pint',
+  'Case',
+  'Box',
+  'Bag',
+  'Dozen',
+  'Bunch',
+  'Bundle',
+  'Head',
+  'Jar',
+  'Can',
+  'Bottle',
+  'Pack',
+  'Roll',
+  'Sheet',
+  'Unit'
+] as const;
+
+export type UnitType = typeof UNITS[number];
+
+// Default units for common categories and subcategories
+export const SUBCATEGORY_DEFAULT_UNITS: Record<string, string> = {
+  // Categories
+  'Produce': 'Lb',
+  'Meat': 'Lb',
+  'Dairy': 'Each',
+  'Dry Goods': 'Each',
+  'Beverages': 'Case',
+  'Frozen': 'Each',
+  'Cleaning': 'Each',
+  // Beverage subcategories
+  'BIB': 'Unit',
+  'Cans/Bottles': 'Case',
+  'Dry': 'Each',
+  'Concentrate': 'Each',
+};

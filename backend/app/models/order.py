@@ -22,6 +22,7 @@ class OrderItemFlag(str, enum.Enum):
     TREND_SUGGESTED = "trend_suggested"  # Based on usage patterns
     MANUAL = "manual"                    # Manually added by user
     CUSTOM = "custom"                    # Special one-off item not in inventory
+    PREVIOUS_SHORTAGE = "previous_shortage"  # Not received from previous order
 
 
 class Order(Base):
@@ -85,14 +86,14 @@ class OrderItem(Base):
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
 
     # Link to inventory item (null if custom)
-    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True)
+    inventory_item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=True, index=True)
 
     # For custom items not in inventory
     custom_item_name = Column(String(255), nullable=True)
     custom_item_description = Column(Text, nullable=True)
 
     # Supplier (can override inventory item's default supplier)
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True, index=True)
 
     # Why this item was added
     flag = Column(String(50), default=OrderItemFlag.MANUAL.value)
@@ -115,6 +116,7 @@ class OrderItem(Base):
     has_issue = Column(Boolean, default=False)  # Quality issue, missing, etc.
     issue_description = Column(Text, nullable=True)
     issue_photo_url = Column(String(500), nullable=True)  # Photo of issue
+    shortage_dismissed = Column(Boolean, default=False)  # User dismissed this shortage from the unreceived list
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

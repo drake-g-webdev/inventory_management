@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -54,6 +54,10 @@ async def extract_receipt_with_ai(
         receipt_aliases: List of known receipt code aliases for matching
         user_instructions: Custom instructions from the user (e.g., "yellow highlighted items are for this property")
     """
+    # Truncate user instructions if too long (safety check)
+    if user_instructions and len(user_instructions) > 2000:
+        user_instructions = user_instructions[:2000] + "..."
+
     if not settings.OPENAI_API_KEY:
         raise HTTPException(
             status_code=500,
@@ -584,6 +588,8 @@ def get_receipt_aliases_for_matching(supplier_id: Optional[int], property_id: in
 
 # ============== UPLOAD ENDPOINT ==============
 
+MAX_NOTES_LENGTH = 2000  # Limit notes to prevent excessive AI token usage
+
 @router.post("/upload", response_model=ReceiptWithDetails)
 async def upload_receipt(
     file: UploadFile = File(...),
@@ -595,6 +601,13 @@ async def upload_receipt(
     """
     Upload a receipt image, extract data with AI, and match to order items.
     """
+    # Validate notes length to prevent excessive AI token usage
+    if notes and len(notes) > MAX_NOTES_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Notes must be {MAX_NOTES_LENGTH} characters or less"
+        )
+
     # Validate file type
     filename_lower = file.filename.lower() if file.filename else ""
     is_heic = any(filename_lower.endswith(ext) for ext in ['.heic', '.heif'])
@@ -872,8 +885,8 @@ def list_receipts(
     order_id: Optional[int] = None,
     supplier_id: Optional[int] = None,
     is_processed: Optional[bool] = None,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=500, description="Max records to return"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1124,7 +1137,7 @@ def add_unmatched_to_inventory(
 def search_inventory_for_matching(
     property_id: int,
     q: str,
-    limit: int = 20,
+    limit: int = Query(20, ge=1, le=100, description="Max results to return"),
     current_user: User = Depends(require_purchasing_team),
     db: Session = Depends(get_db)
 ):

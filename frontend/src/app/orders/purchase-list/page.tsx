@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Truck, Package, Mail, Phone, Building2, ChevronDown, ChevronUp, FileDown } from 'lucide-react';
+import { Truck, Package, Mail, Phone, Building2, ChevronDown, ChevronUp, FileDown, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Badge from '@/components/ui/Badge';
-import { useSupplierPurchaseList } from '@/hooks/useOrders';
+import { useSupplierPurchaseList, useUnreceivedItems } from '@/hooks/useOrders';
 import { formatCurrency } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
-import type { SupplierPurchaseGroup } from '@/types';
+import type { SupplierPurchaseGroup, SupplierPurchaseItem, UnreceivedItem } from '@/types';
 
 function SupplierCard({ supplier, defaultExpanded = false, showPricing = true }: { supplier: SupplierPurchaseGroup; defaultExpanded?: boolean; showPricing?: boolean }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -131,9 +131,90 @@ function SupplierCard({ supplier, defaultExpanded = false, showPricing = true }:
   );
 }
 
+function UnreceivedItemsSection({ items }: { items: UnreceivedItem[] }) {
+  const [expanded, setExpanded] = useState(true);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className="bg-orange-50 border-2 border-orange-400 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div
+        className="px-6 py-4 flex items-center justify-between cursor-pointer bg-orange-500 text-white"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="h-6 w-6" />
+          <div>
+            <h3 className="text-lg font-semibold">Items Not Received from Previous Orders</h3>
+            <p className="text-orange-100 text-sm">These items were ordered but not fully received</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <Badge variant="warning" className="bg-white text-orange-600">
+            {items.length} items
+          </Badge>
+          {expanded ? (
+            <ChevronUp className="h-5 w-5" />
+          ) : (
+            <ChevronDown className="h-5 w-5" />
+          )}
+        </div>
+      </div>
+
+      {/* Items Table - Expanded */}
+      {expanded && (
+        <div>
+          <table className="min-w-full divide-y divide-orange-200">
+            <thead className="bg-orange-100">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-orange-800 uppercase tracking-wider">Item</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-orange-800 uppercase tracking-wider">From Orders</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-orange-800 uppercase tracking-wider">Property</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-orange-800 uppercase tracking-wider">Total Shortage</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-orange-100">
+              {items.map((item, index) => (
+                <tr key={item.inventory_item_id || `custom-${index}`} className="hover:bg-orange-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <Package className="h-4 w-4 text-orange-400 mr-2" />
+                      <span className="font-medium text-gray-900">{item.item_name}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {item.order_count > 1 ? (
+                      <span>{item.order_count} orders</span>
+                    ) : (
+                      <span>{item.latest_order_number}</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center text-sm text-gray-500">
+                      <Building2 className="h-4 w-4 mr-1" />
+                      {item.property_name}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
+                      {item.total_shortage} {item.unit}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PurchaseListPage() {
   const { data: purchaseList, isLoading, error } = useSupplierPurchaseList();
   const { user } = useAuthStore();
+  const { data: unreceivedData } = useUnreceivedItems(user?.property_id || undefined);
 
   // Only show pricing for purchasing supervisors, not purchasing team
   const showPricing = user?.role !== 'purchasing_team';
@@ -152,14 +233,46 @@ export default function PurchaseListPage() {
     };
 
     // Group items by category within a supplier
-    const groupItemsByCategory = (items: typeof supplier.items) => {
-      const grouped: Record<string, typeof items> = {};
+    const groupItemsByCategory = (items: SupplierPurchaseItem[]) => {
+      const grouped: Record<string, SupplierPurchaseItem[]> = {};
       items.forEach(item => {
         const category = item.category || 'Other';
         if (!grouped[category]) grouped[category] = [];
         grouped[category].push(item);
       });
       return grouped;
+    };
+
+    const renderUnreceivedItemsSection = () => {
+      const items = unreceivedData?.items || [];
+      if (items.length === 0) return '';
+
+      return `
+        <div class="unreceived-section">
+          <div class="unreceived-header">
+            <div class="unreceived-title">⚠️ Items Not Received from Previous Orders</div>
+            <div class="unreceived-count">${items.length} items</div>
+          </div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th class="item-col">Item</th>
+                <th class="order-col">From Orders</th>
+                <th class="qty-col shortage-col">Total Shortage</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map(item => `
+                <tr>
+                  <td class="item-col">${item.item_name}</td>
+                  <td class="order-col">${item.order_count > 1 ? `${item.order_count} orders` : item.latest_order_number || ''}</td>
+                  <td class="qty-col shortage-col">${item.total_shortage} ${item.unit || ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
     };
 
     const renderSupplierSection = (supplier: SupplierPurchaseGroup) => {
@@ -211,7 +324,7 @@ export default function PurchaseListPage() {
             font-size: 14px;
             line-height: 1.4;
             padding: 20px;
-            color: #333;
+            color: #000;
           }
           .header {
             text-align: center;
@@ -221,7 +334,7 @@ export default function PurchaseListPage() {
           }
           .header h1 { font-size: 28px; margin-bottom: 8px; }
           .header .property-name { font-size: 20px; font-weight: bold; color: #2563eb; margin-bottom: 8px; }
-          .header p { font-size: 14px; color: #333; }
+          .header p { font-size: 14px; color: #000; }
           .summary {
             display: flex;
             justify-content: space-between;
@@ -233,7 +346,7 @@ export default function PurchaseListPage() {
           .summary-item {
             text-align: center;
           }
-          .summary-item .label { font-size: 12px; color: #333; }
+          .summary-item .label { font-size: 12px; color: #000; }
           .summary-item .value { font-size: 20px; font-weight: bold; }
           .supplier-section {
             margin-bottom: 20px;
@@ -279,12 +392,41 @@ export default function PurchaseListPage() {
           .item-col { width: 60%; padding-left: 20px !important; }
           .qty-col { width: 20%; text-align: center; }
           .unit-col { width: 20%; text-align: center; }
+          .order-col { width: 15%; text-align: center; }
+          .shortage-col { background: #fff7ed !important; color: #c2410c !important; font-weight: bold !important; }
+          .unreceived-section {
+            margin-bottom: 24px;
+            page-break-inside: avoid;
+            border: 2px solid #f97316;
+            border-radius: 4px;
+          }
+          .unreceived-header {
+            background: #f97316;
+            color: white;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .unreceived-title {
+            font-size: 18px;
+            font-weight: bold;
+          }
+          .unreceived-count {
+            font-size: 14px;
+          }
+          .unreceived-section .items-table th {
+            background: #ffedd5;
+          }
+          .unreceived-section .items-table tr:hover {
+            background: #fff7ed;
+          }
           .footer {
             margin-top: 24px;
             padding-top: 12px;
             border-top: 1px solid #ccc;
             font-size: 12px;
-            color: #333;
+            color: #000;
             text-align: center;
           }
           @media print {
@@ -314,6 +456,8 @@ export default function PurchaseListPage() {
             <div class="value">${purchaseList.suppliers.reduce((sum, s) => sum + s.total_items, 0)}</div>
           </div>
         </div>
+
+        ${renderUnreceivedItemsSection()}
 
         ${purchaseList.suppliers.map(supplier => renderSupplierSection(supplier)).join('')}
 
@@ -372,6 +516,11 @@ export default function PurchaseListPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Unreceived Items from Previous Orders */}
+          {unreceivedData && unreceivedData.items.length > 0 && (
+            <UnreceivedItemsSection items={unreceivedData.items} />
           )}
 
           {/* Supplier List */}

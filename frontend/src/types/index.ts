@@ -122,7 +122,7 @@ export type OrderStatus =
   | 'received'
   | 'cancelled';
 
-export type OrderItemFlag = 'low_stock' | 'trend_suggested' | 'manual' | 'custom';
+export type OrderItemFlag = 'low_stock' | 'trend_suggested' | 'manual' | 'custom' | 'previous_shortage';
 
 export interface OrderItem {
   id: number;
@@ -138,6 +138,7 @@ export interface OrderItem {
   notes: string | null;
   reviewer_notes: string | null;
   item_name?: string | null;
+  category?: string | null;
   supplier_id?: number | null;
   supplier_name?: string | null;
   par_level?: number | null;
@@ -147,6 +148,7 @@ export interface OrderItem {
   is_received?: boolean;
   has_issue?: boolean;
   issue_description?: string | null;
+  issue_photo_url?: string | null;
   receiving_notes?: string | null;
 }
 
@@ -231,6 +233,7 @@ export interface Receipt {
   id: number;
   order_id: number | null;
   property_id?: number | null;
+  property_name?: string | null;
   supplier_id: number | null;
   supplier_name?: string | null;
   detected_supplier_name?: string | null;
@@ -376,17 +379,21 @@ export interface CreateOrderPayload {
 }
 
 export interface UpdateOrderItemPayload {
-  quantity_approved?: number | null;
-  review_notes?: string | null;
+  // Using standardized naming (approved_quantity, reviewer_notes)
+  // Backend also accepts quantity_approved and review_notes for backwards compatibility
+  approved_quantity?: number | null;
+  reviewer_notes?: string | null;
+  supplier_id?: number | null;
 }
 
 export interface CreateInventoryCountPayload {
   property_id: number;
-  count_date: string;
   notes?: string | null;
   items: {
     inventory_item_id: number;
-    counted_quantity: number | null;
+    quantity: number;
+    notes?: string | null;
+    confidence?: number | null;
   }[];
 }
 
@@ -538,4 +545,27 @@ export interface CreatePurchaseOrderPayload {
     quantity: number;
     unit_price?: number | null;
   }[];
+}
+
+// Unreceived items from previous orders (aggregated by inventory item)
+export interface UnreceivedItem {
+  inventory_item_id: number | null;
+  item_name: string;
+  total_shortage: number;
+  unit: string | null;
+  unit_price: number | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  property_id: number | null;
+  property_name: string | null;
+  source_order_item_ids: number[];
+  latest_order_number: string | null;
+  latest_week_of: string | null;
+  order_count: number;
+}
+
+export interface UnreceivedItemsList {
+  items: UnreceivedItem[];
+  total_count: number;
+  total_shortage_value: number;
 }
