@@ -14,9 +14,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Accept build-time env var for API URL
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# Set API URL for production build
+ENV NEXT_PUBLIC_API_URL=https://lucky-clarity-production.up.railway.app
 
 # Build the application
 ENV NEXT_TELEMETRY_DISABLED=1
