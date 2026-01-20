@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { CheckCircle2, Eye, Building2, ChevronDown, ChevronRight, Truck, ClipboardList, X } from 'lucide-react';
+import { CheckCircle2, Eye, Building2, ChevronDown, ChevronRight, Truck, ClipboardList, X, Plus, Search } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
-import { usePendingReviewOrders, useReviewOrder, useOrder, useUpdateOrderItem } from '@/hooks/useOrders';
+import Modal from '@/components/ui/Modal';
+import { usePendingReviewOrders, useReviewOrder, useOrder, useUpdateOrderItem, useAddReviewItem } from '@/hooks/useOrders';
 import { useSuppliers } from '@/hooks/useSuppliers';
-import type { OrderItem } from '@/types';
+import { useInventoryItems } from '@/hooks/useInventory';
+import type { OrderItem, InventoryItem } from '@/types';
 import toast from 'react-hot-toast';
 
 interface CategoryGroup {
@@ -27,6 +29,7 @@ export default function ReviewOrdersPage() {
   const { data: suppliers = [] } = useSuppliers();
   const reviewOrder = useReviewOrder();
   const updateOrderItem = useUpdateOrderItem();
+  const addReviewItem = useAddReviewItem();
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   const { data: expandedOrder, refetch: refetchOrder } = useOrder(expandedOrderId || 0);
   const [reviewNotes, setReviewNotes] = useState('');
@@ -34,6 +37,56 @@ export default function ReviewOrdersPage() {
   const [editedQuantities, setEditedQuantities] = useState<Record<number, number>>({});
   const [editedSuppliers, setEditedSuppliers] = useState<Record<number, number | null>>({});
   const [savingItems, setSavingItems] = useState<Set<number>>(new Set());
+
+  // Add item modal state
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [addItemSearch, setAddItemSearch] = useState('');
+  const [selectedItemToAdd, setSelectedItemToAdd] = useState<InventoryItem | null>(null);
+  const [addItemQuantity, setAddItemQuantity] = useState<number>(1);
+
+  // Fetch inventory for the expanded order's property
+  const { data: propertyInventory = [] } = useInventoryItems(expandedOrder?.property_id);
+
+  // Filter inventory items for search
+  const filteredInventory = useMemo(() => {
+    if (!addItemSearch.trim()) return propertyInventory.slice(0, 20);
+    const search = addItemSearch.toLowerCase();
+    return propertyInventory
+      .filter(item =>
+        item.name.toLowerCase().includes(search) ||
+        item.category?.toLowerCase().includes(search) ||
+        item.supplier_name?.toLowerCase().includes(search)
+      )
+      .slice(0, 20);
+  }, [propertyInventory, addItemSearch]);
+
+  // Check if an item is already in the order
+  const isItemInOrder = (itemId: number) => {
+    return expandedOrder?.items?.some(item => item.inventory_item_id === itemId) || false;
+  };
+
+  const handleAddItem = async () => {
+    if (!selectedItemToAdd || !expandedOrderId || addItemQuantity < 1) return;
+
+    try {
+      await addReviewItem.mutateAsync({
+        orderId: expandedOrderId,
+        item: {
+          inventory_item_id: selectedItemToAdd.id,
+          requested_quantity: addItemQuantity,
+          unit: selectedItemToAdd.unit,
+        },
+      });
+      toast.success(`Added ${selectedItemToAdd.name} to order`);
+      refetchOrder();
+      setShowAddItemModal(false);
+      setSelectedItemToAdd(null);
+      setAddItemQuantity(1);
+      setAddItemSearch('');
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Failed to add item');
+    }
+  };
 
   // Group items by supplier, then by category within each supplier
   const supplierGroups = useMemo((): SupplierGroup[] => {
@@ -301,20 +354,30 @@ export default function ReviewOrdersPage() {
                             </div>
                           )}
 
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={expandAll}
-                              className="text-sm text-primary-600 hover:text-primary-800"
+                          <div className="flex justify-between items-center">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowAddItemModal(true)}
                             >
-                              Expand All
-                            </button>
-                            <span className="text-gray-300">|</span>
-                            <button
-                              onClick={collapseAll}
-                              className="text-sm text-primary-600 hover:text-primary-800"
-                            >
-                              Collapse All
-                            </button>
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Item
+                            </Button>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={expandAll}
+                                className="text-sm text-primary-600 hover:text-primary-800"
+                              >
+                                Expand All
+                              </button>
+                              <span className="text-gray-300">|</span>
+                              <button
+                                onClick={collapseAll}
+                                className="text-sm text-primary-600 hover:text-primary-800"
+                              >
+                                Collapse All
+                              </button>
+                            </div>
                           </div>
 
                           <div className="space-y-3">
@@ -461,6 +524,128 @@ export default function ReviewOrdersPage() {
             )}
           </div>
         </div>
+
+        {/* Add Item Modal */}
+        <Modal
+          isOpen={showAddItemModal}
+          onClose={() => {
+            setShowAddItemModal(false);
+            setSelectedItemToAdd(null);
+            setAddItemQuantity(1);
+            setAddItemSearch('');
+          }}
+          title="Add Item to Order"
+          size="lg"
+        >
+          <div className="space-y-4">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={addItemSearch}
+                onChange={(e) => setAddItemSearch(e.target.value)}
+                placeholder="Search inventory items..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                autoFocus
+              />
+            </div>
+
+            {/* Item list */}
+            <div className="max-h-64 overflow-y-auto border rounded-lg divide-y">
+              {filteredInventory.length === 0 ? (
+                <div className="p-4 text-center text-gray-500">
+                  {addItemSearch ? 'No items found' : 'Start typing to search...'}
+                </div>
+              ) : (
+                filteredInventory.map((item) => {
+                  const inOrder = isItemInOrder(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => !inOrder && setSelectedItemToAdd(item)}
+                      disabled={inOrder}
+                      className={`w-full px-4 py-3 text-left flex items-center justify-between ${
+                        selectedItemToAdd?.id === item.id
+                          ? 'bg-primary-50 border-l-4 border-primary-500'
+                          : inOrder
+                          ? 'bg-gray-50 cursor-not-allowed'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div>
+                        <p className={`font-medium ${inOrder ? 'text-gray-400' : 'text-gray-900'}`}>
+                          {item.name}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {item.category} {item.supplier_name && `• ${item.supplier_name}`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        {inOrder ? (
+                          <span className="text-xs text-gray-400 bg-gray-200 px-2 py-1 rounded">
+                            Already in order
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-500">{item.unit}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Selected item and quantity */}
+            {selectedItemToAdd && (
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">{selectedItemToAdd.name}</p>
+                    <p className="text-sm text-gray-600">
+                      {selectedItemToAdd.category} • {selectedItemToAdd.unit}
+                      {selectedItemToAdd.supplier_name && ` • ${selectedItemToAdd.supplier_name}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Qty:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={addItemQuantity}
+                      onChange={(e) => setAddItemQuantity(parseInt(e.target.value) || 1)}
+                      className="w-20 px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 text-center"
+                    />
+                    <span className="text-sm text-gray-500">{selectedItemToAdd.unit}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAddItemModal(false);
+                  setSelectedItemToAdd(null);
+                  setAddItemQuantity(1);
+                  setAddItemSearch('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAddItem}
+                disabled={!selectedItemToAdd || addItemQuantity < 1}
+                isLoading={addReviewItem.isPending}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add to Order
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </DashboardLayout>
     </RoleGuard>
   );

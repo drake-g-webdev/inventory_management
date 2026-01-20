@@ -946,6 +946,71 @@ def add_order_item(
     return order
 
 
+@router.post("/{order_id}/add-review-item", response_model=OrderResponse)
+def add_review_item(
+    order_id: int,
+    item_data: OrderItemCreate,
+    current_user: User = Depends(require_supervisor_or_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Add an item to an order during review.
+    Used by purchasing supervisors to add items from the property's inventory
+    while reviewing a submitted order.
+    Only works for orders in 'submitted' or 'under_review' status.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.status not in [OrderStatus.SUBMITTED.value, OrderStatus.UNDER_REVIEW.value]:
+        raise HTTPException(
+            status_code=400,
+            detail="Can only add items to orders under review (submitted or under_review status)"
+        )
+
+    # Get unit and price from inventory item if provided
+    unit = item_data.unit
+    unit_price = item_data.unit_price
+    supplier_id = item_data.supplier_id
+    inventory_item_id = item_data.inventory_item_id
+
+    if inventory_item_id:
+        inv_item = db.query(InventoryItem).filter(InventoryItem.id == inventory_item_id).first()
+        if inv_item:
+            if not unit:
+                unit = inv_item.unit
+            if not unit_price:
+                unit_price = inv_item.unit_price
+            if not supplier_id:
+                supplier_id = inv_item.supplier_id
+
+    # Create the order item
+    order_item = OrderItem(
+        order_id=order.id,
+        inventory_item_id=inventory_item_id,
+        custom_item_name=item_data.custom_item_name if inventory_item_id is None else None,
+        custom_item_description=item_data.custom_item_description,
+        supplier_id=supplier_id,
+        flag=OrderItemFlag.MANUAL.value,
+        requested_quantity=item_data.requested_quantity,
+        approved_quantity=item_data.requested_quantity,  # Auto-set approved = requested
+        unit=unit,
+        unit_price=unit_price,
+        camp_notes=item_data.camp_notes
+    )
+    db.add(order_item)
+    db.commit()
+
+    # Recalculate order total
+    order.estimated_total = calculate_order_total(order)
+    db.commit()
+    db.refresh(order)
+
+    logger.info(f"Added item to order {order.order_number} during review by {current_user.email}")
+    return order
+
+
 @router.put("/{order_id}/items/{item_id}", response_model=OrderItemWithDetails)
 def update_order_item(
     order_id: int,

@@ -237,6 +237,19 @@ export function useAddOrderItem() {
   });
 }
 
+export function useAddReviewItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orderId, item }: { orderId: number; item: { inventory_item_id?: number; custom_item_name?: string; requested_quantity: number; unit?: string } }) => {
+      const response = await api.post(`/orders/${orderId}/add-review-item`, item);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
 export function useGenerateSupplierList() {
   return useMutation({
     mutationFn: async (orderIds: number[]) => {

@@ -41,7 +41,8 @@ async def extract_receipt_with_ai(
     property_code: str = None,
     supplier_parsing_prompt: str = None,
     receipt_aliases: List[dict] = None,
-    user_instructions: str = None
+    user_instructions: str = None,
+    all_property_codes: List[str] = None
 ) -> ReceiptExtractionResult:
     """Use OpenAI Vision to extract receipt data and match to order items.
 
@@ -75,9 +76,9 @@ async def extract_receipt_with_ai(
         ])
 
         # Build property context for multi-camp receipts
-        # List all known property codes so AI knows what to look for
-        all_property_codes = ["YRC", "SCC", "DHC", "CXF", "MLY", "HMG"]
-        other_codes = [c for c in all_property_codes if c != property_code] if property_code else all_property_codes
+        # Use provided property codes list (fetched from database) or fallback to empty list
+        codes_list = all_property_codes or []
+        other_codes = [c for c in codes_list if c != property_code] if property_code else codes_list
 
         property_context = ""
         if property_code or property_name:
@@ -712,6 +713,10 @@ async def upload_receipt(
             receipt_aliases = get_receipt_aliases_for_matching(matched_supplier.id, property_id, db)
             logger.info(f"Found {len(receipt_aliases)} receipt code aliases for matching")
 
+    # Fetch all active property codes from database for multi-camp filtering
+    all_properties = db.query(Property).filter(Property.is_active == True).all()
+    all_property_codes = [p.code for p in all_properties]
+
     # STEP 2: Full extraction with supplier-specific context and user instructions
     extracted_data = await extract_receipt_with_ai(
         content,
@@ -720,7 +725,8 @@ async def upload_receipt(
         property_code,
         supplier_parsing_prompt=supplier_parsing_prompt,
         receipt_aliases=receipt_aliases,
-        user_instructions=notes  # Pass notes as AI instructions
+        user_instructions=notes,  # Pass notes as AI instructions
+        all_property_codes=all_property_codes  # Pass property codes from database
     )
 
     # Save image to uploads directory

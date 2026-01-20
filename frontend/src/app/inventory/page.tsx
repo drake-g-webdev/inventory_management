@@ -471,16 +471,15 @@ export default function InventoryPage() {
 
     const renderRow = (row: RowData) => {
       if (row.type === 'category') {
-        return `<tr class="category-row"><td colspan="4">${row.content}</td></tr>`;
+        return `<tr class="category-row"><td colspan="3">${row.content}</td></tr>`;
       } else if (row.type === 'subcategory') {
-        return `<tr class="subcategory-row"><td colspan="4">${row.content}</td></tr>`;
+        return `<tr class="subcategory-row"><td colspan="3">${row.content}</td></tr>`;
       } else {
         const item = row.item!;
         return `
           <tr>
             <td class="item-name">${item.name}</td>
             <td class="unit-cell">${item.unit}</td>
-            <td class="par-cell">${item.par_level || '-'}</td>
             <td class="count-cell"></td>
           </tr>
         `;
@@ -517,7 +516,6 @@ export default function InventoryPage() {
                   <tr>
                     <th>Item</th>
                     <th class="unit-cell">Unit</th>
-                    <th class="par-cell">Par</th>
                     <th class="count-cell">Count</th>
                   </tr>
                 </thead>
@@ -532,7 +530,6 @@ export default function InventoryPage() {
                   <tr>
                     <th>Item</th>
                     <th class="unit-cell">Unit</th>
-                    <th class="par-cell">Par</th>
                     <th class="count-cell">Count</th>
                   </tr>
                 </thead>
@@ -630,7 +627,6 @@ export default function InventoryPage() {
             background: #fffef0;
           }
           .unit-cell { width: 55px; }
-          .par-cell { width: 45px; text-align: center; }
 
           .footer {
             margin-top: 12px;
