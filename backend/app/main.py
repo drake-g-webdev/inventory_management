@@ -30,10 +30,16 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS middleware
+# CORS middleware - allow Railway domains and localhost
+allowed_origins = [
+    settings.FRONTEND_URL,
+    "http://localhost:3001",
+    "http://localhost:3005",
+    "https://inventorymanagement-production-8ea8.up.railway.app",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3005"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
