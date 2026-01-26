@@ -176,17 +176,17 @@ export default function ReceiveOrdersPage() {
   return (
     <RoleGuard allowedRoles={['camp_worker']}>
       <DashboardLayout>
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
           {!selectedOrderId ? (
             <>
               {/* Order List View */}
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center">
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Receive Orders</h1>
-                  <p className="text-gray-500 mt-1">Mark items as received and flag any issues</p>
+                  <h1 className="text-xl md:text-2xl font-bold text-gray-900">Receive Orders</h1>
+                  <p className="text-sm md:text-base text-gray-500 mt-1">Mark items as received and flag any issues</p>
                 </div>
                 <Link href="/orders">
-                  <Button variant="outline">
+                  <Button variant="outline" className="w-full md:w-auto">
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Orders
                   </Button>
@@ -217,15 +217,15 @@ export default function ReceiveOrdersPage() {
                         <div
                           key={order.id}
                           onClick={() => handleSelectOrder(order)}
-                          className="p-6 hover:bg-gray-50 cursor-pointer flex items-center justify-between"
+                          className="p-4 md:p-6 hover:bg-gray-50 cursor-pointer active:bg-gray-100 flex items-center justify-between"
                         >
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-2">
                               <span className="font-semibold text-gray-900">
                                 {order.order_number}
                               </span>
                               <span className={`px-2 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[order.status]}`}>
-                                {order.status === 'received' ? 'Received' : order.status === 'partially_received' ? 'Partially Received' : 'Ready to Receive'}
+                                {order.status === 'received' ? 'Received' : order.status === 'partially_received' ? 'Partial' : 'Ready'}
                               </span>
                               {hasSavedProgress && (
                                 <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
@@ -235,23 +235,22 @@ export default function ReceiveOrdersPage() {
                             </div>
                             <div className="text-sm text-gray-500">
                               <span>Week of {new Date(order.week_of).toLocaleDateString()}</span>
-                              <span className="mx-2">|</span>
+                              <span className="mx-1 md:mx-2">|</span>
                               <span>
-                                {receivedCount} received
+                                {receivedCount}/{totalCount} items
                                 {inProgressCount > 0 && (
-                                  <span className="text-blue-600">, {inProgressCount} in progress</span>
+                                  <span className="text-blue-600 hidden sm:inline">, {inProgressCount} in progress</span>
                                 )}
-                                {' '}of {totalCount} items
                               </span>
                               {!!order.estimated_total && (
-                                <>
+                                <span className="hidden md:inline">
                                   <span className="mx-2">|</span>
                                   <span>{formatCurrency(order.estimated_total)}</span>
-                                </>
+                                </span>
                               )}
                             </div>
                           </div>
-                          <ChevronRight className="h-5 w-5 text-gray-400" />
+                          <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0 ml-2" />
                         </div>
                       );
                     })}
@@ -262,7 +261,7 @@ export default function ReceiveOrdersPage() {
           ) : (
             <>
               {/* Receiving View */}
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center">
                 <div>
                   <button
                     onClick={() => { setSelectedOrderId(null); setReceivingItems({}); }}
@@ -271,34 +270,34 @@ export default function ReceiveOrdersPage() {
                     <ArrowLeft className="h-4 w-4 mr-1" />
                     Back to Orders
                   </button>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    Receive Order {selectedOrder?.order_number}
+                  <h1 className="text-xl md:text-2xl font-bold text-gray-900">
+                    Receive {selectedOrder?.order_number}
                   </h1>
-                  <p className="text-gray-500 mt-1">
-                    Mark items as received. Flag any items with quality issues.
+                  <p className="text-sm md:text-base text-gray-500 mt-1">
+                    Mark items as received. Flag any issues.
                   </p>
                 </div>
                 <Button
                   variant="outline"
                   onClick={() => setShowAddItemModal(true)}
-                  className="flex items-center gap-2"
+                  className="flex items-center justify-center gap-2 w-full md:w-auto"
                 >
                   <Plus className="h-4 w-4" />
-                  Add Another Item
+                  Add Item
                 </Button>
               </div>
 
               {selectedOrder && (
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  <div className="p-4 bg-gray-50 border-b">
-                    <div className="flex items-center justify-between">
+                  <div className="p-3 md:p-4 bg-gray-50 border-b">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div className="text-sm text-gray-600">
                         <span className="font-medium">Week of:</span> {new Date(selectedOrder.week_of).toLocaleDateString()}
                       </div>
                       {getFlaggedCount() > 0 && (
                         <div className="flex items-center text-amber-600 text-sm">
                           <AlertTriangle className="h-4 w-4 mr-1" />
-                          {getFlaggedCount()} item(s) flagged with issues
+                          {getFlaggedCount()} flagged
                         </div>
                       )}
                     </div>
@@ -310,10 +309,12 @@ export default function ReceiveOrdersPage() {
                       const isAlreadyReceived = item.is_received;
 
                       return (
-                        <div key={item.id} className={`p-4 ${isAlreadyReceived ? 'bg-green-50' : ''}`}>
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
+                        <div key={item.id} className={`p-3 md:p-4 ${isAlreadyReceived ? 'bg-green-50' : ''}`}>
+                          {/* Mobile: stacked layout, Desktop: horizontal */}
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            {/* Item info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-medium text-gray-900">
                                   {getItemName(item)}
                                 </span>
@@ -326,7 +327,7 @@ export default function ReceiveOrdersPage() {
                                 {item.has_issue && (
                                   <span className="flex items-center text-amber-600 text-xs">
                                     <AlertTriangle className="h-3 w-3 mr-1" />
-                                    Issue Reported
+                                    Issue
                                   </span>
                                 )}
                               </div>
@@ -335,7 +336,7 @@ export default function ReceiveOrdersPage() {
                                   Expected: {item.approved_quantity ?? item.requested_quantity} {item.unit}
                                 </span>
                                 {item.unit_price && (
-                                  <span className="ml-2 text-gray-500">@ {formatCurrency(item.unit_price)}/{item.unit}</span>
+                                  <span className="ml-2 text-gray-500 hidden sm:inline">@ {formatCurrency(item.unit_price)}/{item.unit}</span>
                                 )}
                               </div>
                               {item.issue_description && !state?.has_issue && (
@@ -345,9 +346,11 @@ export default function ReceiveOrdersPage() {
                               )}
                             </div>
 
+                            {/* Quantity and flag controls */}
                             {state && (
-                              <div className="flex items-center gap-4">
-                                <div className="flex flex-col items-end">
+                              <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4">
+                                {/* Quantity input */}
+                                <div className="flex flex-col">
                                   <label className="text-xs text-gray-500 mb-1">{isAlreadyReceived ? 'Edit Qty' : 'Qty Received'}</label>
                                   {(() => {
                                     const expected = item.approved_quantity ?? item.requested_quantity;
@@ -361,49 +364,52 @@ export default function ReceiveOrdersPage() {
                                     return (
                                       <input
                                         type="number"
+                                        inputMode="decimal"
                                         min="0"
                                         value={state.received_quantity}
                                         onChange={(e) => handleQuantityChange(item.id, parseFloat(e.target.value) || 0)}
-                                        className={`w-24 px-3 py-2 border rounded-lg text-center ${inputClass}`}
+                                        className={`w-20 md:w-24 px-2 md:px-3 py-2 text-base md:text-sm border rounded-lg text-center ${inputClass}`}
                                       />
                                     );
                                   })()}
                                 </div>
 
+                                {/* Flag issue button */}
                                 <button
                                   onClick={() => handleToggleIssue(item.id)}
-                                  className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium ${
+                                  className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] ${
                                     state.has_issue
                                       ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                      : 'bg-gray-100 text-gray-600 hover:bg-amber-50 hover:text-amber-700'
+                                      : 'bg-gray-100 text-gray-600 hover:bg-amber-50 hover:text-amber-700 active:bg-amber-100'
                                   }`}
                                 >
                                   <AlertTriangle className="h-4 w-4" />
-                                  {state.has_issue ? 'Flagged' : 'Flag Issue'}
+                                  <span className="hidden sm:inline">{state.has_issue ? 'Flagged' : 'Flag'}</span>
                                 </button>
                               </div>
                             )}
                           </div>
 
+                          {/* Issue description */}
                           {state?.has_issue && state.issue_description && (
                             <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <span className="text-sm font-medium text-amber-800">Issue Description:</span>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-sm font-medium text-amber-800">Issue:</span>
                                   <p className="text-sm text-amber-700 mt-1">{state.issue_description}</p>
                                   {state.issue_photo_url && (
                                     <div className="mt-2">
                                       <img
                                         src={`${process.env.NEXT_PUBLIC_API_URL}${state.issue_photo_url}`}
                                         alt="Issue photo"
-                                        className="max-w-[200px] max-h-[150px] rounded-lg border border-amber-300"
+                                        className="max-w-[150px] md:max-w-[200px] max-h-[100px] md:max-h-[150px] rounded-lg border border-amber-300"
                                       />
                                     </div>
                                   )}
                                 </div>
                                 <button
                                   onClick={() => setShowFlagModal(item.id)}
-                                  className="text-xs text-amber-600 hover:text-amber-800 ml-2"
+                                  className="text-xs text-amber-600 hover:text-amber-800 px-2 py-1"
                                 >
                                   Edit
                                 </button>
@@ -415,17 +421,19 @@ export default function ReceiveOrdersPage() {
                     })}
                   </div>
 
-                  <div className="p-4 bg-gray-50 border-t">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                      <p className="text-sm text-gray-500">
+                  <div className="p-3 md:p-4 bg-gray-50 border-t">
+                    <div className="flex flex-col gap-3">
+                      <p className="text-sm text-gray-500 text-center md:text-left">
                         {selectedOrder?.status === 'received'
-                          ? 'Edit quantities and save changes. Inventory will be adjusted automatically.'
-                          : 'Save progress to continue receiving later, or finalize to update inventory.'}
+                          ? 'Edit quantities and save changes.'
+                          : 'Save progress or finalize to update inventory.'}
                       </p>
-                      <div className="flex gap-3">
+                      {/* Mobile: stacked buttons, Desktop: horizontal row */}
+                      <div className="flex flex-col gap-2 md:flex-row md:justify-end md:gap-3">
                         <Button
                           variant="outline"
                           onClick={() => { setSelectedOrderId(null); setReceivingItems({}); }}
+                          className="w-full md:w-auto order-3 md:order-1"
                         >
                           Cancel
                         </Button>
@@ -433,14 +441,16 @@ export default function ReceiveOrdersPage() {
                           variant="outline"
                           onClick={() => handleReceiveItems(false)}
                           disabled={receiveItems.isPending || Object.keys(receivingItems).length === 0}
+                          className="w-full md:w-auto order-2"
                         >
                           {receiveItems.isPending ? 'Saving...' : 'Save Progress'}
                         </Button>
                         <Button
                           onClick={() => handleReceiveItems(true)}
                           disabled={receiveItems.isPending || Object.keys(receivingItems).length === 0}
+                          className="w-full md:w-auto order-1 md:order-3"
                         >
-                          {receiveItems.isPending ? 'Saving...' : selectedOrder?.status === 'received' ? 'Save Changes' : 'Finalize Receiving'}
+                          {receiveItems.isPending ? 'Saving...' : selectedOrder?.status === 'received' ? 'Save Changes' : 'Finalize'}
                         </Button>
                       </div>
                     </div>

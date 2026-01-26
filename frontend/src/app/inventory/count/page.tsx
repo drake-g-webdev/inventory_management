@@ -400,44 +400,46 @@ export default function InventoryCountPage() {
   return (
     <RoleGuard allowedRoles={['camp_worker']}>
       <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
+        <div className="space-y-4 md:space-y-6">
+          {/* Mobile-optimized header */}
+          <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Inventory Count</h1>
-              <p className="text-gray-500 mt-1">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900">Inventory Count</h1>
+              <p className="text-sm md:text-base text-gray-500 mt-1">
                 Record current inventory levels for {user?.property_name || 'your property'}
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={handlePrintForm}>
-                <Printer className="h-4 w-4 mr-2" />
-                Print Form
+            {/* Mobile: 2x2 grid of buttons, Desktop: horizontal row */}
+            <div className="grid grid-cols-2 gap-2 md:flex md:gap-3">
+              <Button variant="outline" onClick={handlePrintForm} className="text-sm md:text-base">
+                <Printer className="h-4 w-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Print </span>Form
               </Button>
-              <Button variant="outline" onClick={() => setShowPhotoModal(true)}>
-                <Camera className="h-4 w-4 mr-2" />
-                Scan Photos
+              <Button variant="outline" onClick={() => setShowPhotoModal(true)} className="text-sm md:text-base">
+                <Camera className="h-4 w-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Scan </span>Photos
               </Button>
-              <Button variant="outline" onClick={() => setShowHistoryModal(true)}>
-                <History className="h-4 w-4 mr-2" />
-                View History
+              <Button variant="outline" onClick={() => setShowHistoryModal(true)} className="text-sm md:text-base">
+                <History className="h-4 w-4 mr-1 md:mr-2" />
+                History
               </Button>
-              <Button onClick={handleSubmit} isLoading={createCount.isPending}>
-                <Save className="h-4 w-4 mr-2" />
-                Save Count
+              <Button onClick={handleSubmit} isLoading={createCount.isPending} className="text-sm md:text-base">
+                <Save className="h-4 w-4 mr-1 md:mr-2" />
+                Save
               </Button>
             </div>
           </div>
 
           {/* Notes field */}
-          <div className="bg-white rounded-xl shadow-sm p-4">
+          <div className="bg-white rounded-xl shadow-sm p-3 md:p-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Count Notes (optional)
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add any notes about this count (e.g., 'After delivery', 'End of week')"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="Add any notes about this count..."
+              className="w-full px-3 py-2 text-base md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
               rows={2}
             />
           </div>
@@ -453,10 +455,10 @@ export default function InventoryCountPage() {
               <p className="text-gray-500">No inventory items found for your property</p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-6">
               {Object.entries(groupedItems).map(([category, items]) => (
                 <div key={category} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                  <div className="px-4 md:px-6 py-3 md:py-4 bg-gray-50 border-b border-gray-200">
                     <h2 className="font-semibold text-gray-900">{category}</h2>
                     <p className="text-sm text-gray-500">{items.length} items</p>
                   </div>
@@ -464,45 +466,59 @@ export default function InventoryCountPage() {
                     {items.map((item) => (
                       <div
                         key={item.id}
-                        className="px-6 py-4 flex items-center justify-between hover:bg-gray-50"
+                        className="px-4 md:px-6 py-3 md:py-4 hover:bg-gray-50"
                       >
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{item.name}</p>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-                            <span>Unit: {item.unit}</span>
-                            {item.par_level && (
-                              <span>Par Level: {item.par_level}</span>
-                            )}
-                            {item.supplier_name && (
-                              <span>Supplier: {item.supplier_name}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500 mb-1">Current Stock</p>
-                            <p className="font-medium">{item.current_stock} {item.unit}</p>
-                          </div>
-                          <div className="w-32">
-                            <label className="text-xs text-gray-500 mb-1 block">Count</label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              value={counts[item.id] ?? ''}
-                              onChange={(e) => handleCountChange(item.id, e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-right"
-                              placeholder="0"
-                            />
-                          </div>
-                          {counts[item.id] !== null && counts[item.id] !== item.current_stock && (
-                            <div className={`text-sm font-medium ${
-                              (counts[item.id] ?? 0) > item.current_stock ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {(counts[item.id] ?? 0) > item.current_stock ? '+' : ''}
-                              {((counts[item.id] ?? 0) - item.current_stock).toFixed(1)}
+                        {/* Mobile: stacked layout, Desktop: horizontal layout */}
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+                          {/* Item info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{item.name}</p>
+                            <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-1 text-sm text-gray-500">
+                              <span>Unit: {item.unit}</span>
+                              {item.par_level && (
+                                <span className="hidden sm:inline">Par: {item.par_level}</span>
+                              )}
+                              {item.supplier_name && (
+                                <span className="hidden md:inline">Supplier: {item.supplier_name}</span>
+                              )}
                             </div>
-                          )}
+                          </div>
+
+                          {/* Mobile: horizontal row for stock/count/diff, Desktop: same */}
+                          <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4">
+                            {/* Current stock - compact on mobile */}
+                            <div className="text-left md:text-right">
+                              <p className="text-xs text-gray-500">Current</p>
+                              <p className="font-medium text-sm md:text-base">{item.current_stock} {item.unit}</p>
+                            </div>
+
+                            {/* Count input - larger touch target on mobile */}
+                            <div className="w-24 md:w-32">
+                              <label className="text-xs text-gray-500 block">Count</label>
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="0.5"
+                                value={counts[item.id] ?? ''}
+                                onChange={(e) => handleCountChange(item.id, e.target.value)}
+                                className="w-full px-2 md:px-3 py-2 md:py-2 text-base md:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-right"
+                                placeholder="0"
+                              />
+                            </div>
+
+                            {/* Difference indicator */}
+                            <div className="w-12 md:w-16 text-right">
+                              {counts[item.id] !== null && counts[item.id] !== item.current_stock && (
+                                <span className={`text-sm font-medium ${
+                                  (counts[item.id] ?? 0) > item.current_stock ? 'text-green-600' : 'text-red-600'
+                                }`}>
+                                  {(counts[item.id] ?? 0) > item.current_stock ? '+' : ''}
+                                  {((counts[item.id] ?? 0) - item.current_stock).toFixed(1)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
