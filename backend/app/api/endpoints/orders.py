@@ -538,8 +538,9 @@ def get_unreceived_items(
     prop = db.query(Property).filter(Property.id == property_id).first()
     prop_name = prop.name if prop else None
 
-    # Aggregate shortages by inventory_item_id (or custom_item_name for custom items)
-    aggregated: dict = {}  # key: inventory_item_id or f"custom:{name}"
+    # Get only the MOST RECENT shortage for each item (not aggregated)
+    # Items are sorted by week_of desc, so first occurrence is most recent
+    most_recent: dict = {}  # key: inventory_item_id or f"custom:{name}"
     total_shortage_value = 0.0
 
     for item in items:
@@ -551,7 +552,7 @@ def get_unreceived_items(
         if shortage <= 0:
             continue
 
-        # Determine aggregation key
+        # Determine key for grouping
         if item.inventory_item_id:
             key = item.inventory_item_id
             item_name = item.inventory_item.name if item.inventory_item else "Unknown Item"
@@ -559,6 +560,10 @@ def get_unreceived_items(
             # For custom items, use the name as key
             item_name = item.custom_item_name or "Unknown Item"
             key = f"custom:{item_name.lower()}"
+
+        # Only keep the MOST RECENT order's shortage (first one we see since sorted desc)
+        if key in most_recent:
+            continue
 
         # Get supplier info
         supplier_name = None
@@ -576,51 +581,41 @@ def get_unreceived_items(
         shortage_value = shortage * unit_price
         total_shortage_value += shortage_value
 
-        if key not in aggregated:
-            aggregated[key] = {
-                'inventory_item_id': item.inventory_item_id,
-                'item_name': item_name,
-                'total_shortage': 0.0,
-                'unit': item.unit,
-                'unit_price': unit_price,
-                'supplier_id': supplier_id,
-                'supplier_name': supplier_name,
-                'source_order_item_ids': [],
-                'latest_order_number': order.order_number,
-                'latest_week_of': order.week_of,
-                'order_count': 0
-            }
-
-        agg = aggregated[key]
-        agg['total_shortage'] += shortage
-        agg['source_order_item_ids'].append(item.id)
-        agg['order_count'] += 1
-        # Keep the most recent order info (items are sorted by week_of desc)
-        if not agg['latest_week_of'] or (order.week_of and order.week_of > agg['latest_week_of']):
-            agg['latest_order_number'] = order.order_number
-            agg['latest_week_of'] = order.week_of
+        most_recent[key] = {
+            'inventory_item_id': item.inventory_item_id,
+            'item_name': item_name,
+            'total_shortage': shortage,  # Just this order's shortage, not aggregated
+            'unit': item.unit,
+            'unit_price': unit_price,
+            'supplier_id': supplier_id,
+            'supplier_name': supplier_name,
+            'source_order_item_ids': [item.id],  # Only this order item
+            'latest_order_number': order.order_number,
+            'latest_week_of': order.week_of,
+            'order_count': 1  # Always 1 since we're not aggregating
+        }
 
     # Build result list
     result = [
         UnreceivedItemResponse(
-            inventory_item_id=agg['inventory_item_id'],
-            item_name=agg['item_name'],
-            total_shortage=agg['total_shortage'],
-            unit=agg['unit'],
-            unit_price=agg['unit_price'],
-            supplier_id=agg['supplier_id'],
-            supplier_name=agg['supplier_name'],
+            inventory_item_id=data['inventory_item_id'],
+            item_name=data['item_name'],
+            total_shortage=data['total_shortage'],
+            unit=data['unit'],
+            unit_price=data['unit_price'],
+            supplier_id=data['supplier_id'],
+            supplier_name=data['supplier_name'],
             property_id=property_id,
             property_name=prop_name,
-            source_order_item_ids=agg['source_order_item_ids'],
-            latest_order_number=agg['latest_order_number'],
-            latest_week_of=agg['latest_week_of'],
-            order_count=agg['order_count']
+            source_order_item_ids=data['source_order_item_ids'],
+            latest_order_number=data['latest_order_number'],
+            latest_week_of=data['latest_week_of'],
+            order_count=data['order_count']
         )
-        for agg in aggregated.values()
+        for data in most_recent.values()
     ]
 
-    # Sort by total shortage descending
+    # Sort by shortage descending
     result.sort(key=lambda x: x.total_shortage, reverse=True)
 
     return UnreceivedItemsList(
