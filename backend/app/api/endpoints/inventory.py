@@ -415,23 +415,38 @@ The inventory items in this system are:
 
 Your response MUST be a valid JSON array with the following format:
 [
-  {{"item_id": 123, "item_name": "Item Name", "quantity": 10.5, "confidence": 0.95, "notes": "optional notes about this count"}},
+  {{"item_id": 123, "item_name": "Item Name", "quantity": 10.5, "confidence": 0.85, "notes": "optional notes about this count"}},
   ...
 ]
 
-CRITICAL INSTRUCTIONS:
+CRITICAL INSTRUCTIONS FOR HANDLING BLANK/CROSSED OUT ITEMS:
+1. If an item's count field is BLANK (empty, no number written) - SKIP THIS ITEM ENTIRELY. Do NOT include it in your response. Do NOT assume 0.
+2. If an item's count is CROSSED OUT, SCRIBBLED OVER, or has a line through it - SKIP THIS ITEM ENTIRELY. Do NOT include it.
+3. If you cannot read the number at all - SKIP THIS ITEM ENTIRELY. Do NOT guess.
+4. ONLY include items where you can clearly see a number written in the count field.
+
+CRITICAL INSTRUCTIONS FOR QUANTITY:
 1. PRESERVE DECIMAL/FRACTIONAL COUNTS EXACTLY as written - do NOT round! If someone wrote "1.5", return 1.5. If they wrote ".5" or "0.5", return 0.5.
 2. DO NOT round up or down - report the EXACT number written on the sheet
 3. Look carefully for decimal points - a "." before a number means it's a fraction (e.g., ".5" = 0.5)
 4. Common partial counts: 0.5, 1.5, 2.5, 0.25, 0.75 - these are valid and should be preserved
-5. Match the items to the inventory list provided above. Use the item_id from the list.
-6. If you can't find an exact match, try to find the closest match and note it in the notes field
-7. Include a confidence score (0.0 to 1.0) for each count based on how clearly you can read it
-8. If handwriting is unclear, include a note about what the value might be
-9. Extract EVERY item you can see in the photo - do not skip any items
-10. Return ONLY the JSON array, no other text
+5. A count of ZERO (0) should ONLY be included if someone explicitly wrote "0" - not if the field is blank!
 
-IMPORTANT: The quantity field accepts decimals. A count of "1.5" means one and a half units - this is common in inventory. Never interpret ".5" as "5" - that would be a decimal point before the 5."""
+MATCHING INSTRUCTIONS:
+1. Match the items to the inventory list provided above. Use the item_id from the list.
+2. If you can't find an exact match, try to find the closest match and note it in the notes field.
+
+CONFIDENCE SCORE GUIDELINES (be honest and accurate):
+- 0.95-1.0: Crystal clear, printed or very neat handwriting, no ambiguity whatsoever
+- 0.85-0.94: Clear handwriting, confident in the reading
+- 0.70-0.84: Readable but some uncertainty (e.g., is that a 1 or a 7? is that a 6 or a 0?)
+- 0.50-0.69: Difficult to read, making an educated guess based on context
+- Below 0.50: Very uncertain - consider skipping this item instead
+- If handwriting is unclear, include a note explaining what you think it says and alternatives
+
+IMPORTANT: The quantity field accepts decimals. A count of "1.5" means one and a half units - this is common in inventory. Never interpret ".5" as "5" - that would be a decimal point before the 5.
+
+Return ONLY the JSON array, no other text. Only include items where you can see a number written - skip all blank entries."""
 
         # Collect all image data (bytes, media_type) to process
         # This allows us to handle PDFs by extracting pages as images
@@ -503,7 +518,7 @@ IMPORTANT: The quantity field accepts decimals. A count of "1.5" means one and a
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": f"Please analyze this inventory count sheet ({page_label}, page {img_index + 1} of {total_pages}) and extract ALL item counts. Return only valid JSON."},
+                        {"type": "text", "text": f"Please analyze this inventory count sheet ({page_label}, page {img_index + 1} of {total_pages}). Extract ONLY items that have a number written in their count field. SKIP any items where the count is blank, crossed out, or unreadable. Be honest about confidence scores - use lower scores for unclear handwriting. Return only valid JSON."},
                         image_content
                     ]
                 }
