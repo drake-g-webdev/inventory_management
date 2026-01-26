@@ -11,7 +11,7 @@ from app.schemas.property import PropertyCreate, PropertyUpdate, PropertyRespons
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
 
-@router.get("/", response_model=List[PropertyResponse])
+@router.get("", response_model=List[PropertyResponse])
 def list_properties(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=500, description="Max records to return"),
@@ -55,7 +55,7 @@ def get_property(
     return response
 
 
-@router.post("/", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED)
 def create_property(
     prop_data: PropertyCreate,
     current_user: User = Depends(require_admin),
