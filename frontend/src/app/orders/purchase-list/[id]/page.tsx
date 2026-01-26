@@ -306,7 +306,7 @@ export default function OrderPurchaseListPage() {
         ${purchaseList.suppliers.map(supplier => renderSupplierSection(supplier)).join('')}
 
         <div class="footer">
-          <p>SUKAKPAK Purchasing Management System | Printed ${today}</p>
+          <p>SUKAKPAK Purchasing Support System | Printed ${today}</p>
         </div>
 
         <script>
