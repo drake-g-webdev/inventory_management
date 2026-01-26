@@ -425,7 +425,8 @@ def get_all_unreceived_items(
         joinedload(OrderItem.inventory_item),
         joinedload(OrderItem.supplier)
     ).join(Order).filter(
-        Order.status.in_([OrderStatus.RECEIVED.value, OrderStatus.PARTIALLY_RECEIVED.value])
+        Order.status.in_([OrderStatus.RECEIVED.value, OrderStatus.PARTIALLY_RECEIVED.value]),
+        (OrderItem.shortage_dismissed == False) | (OrderItem.shortage_dismissed.is_(None))  # Exclude dismissed shortages
     )
 
     items = query.order_by(Order.week_of.desc()).all()
@@ -528,7 +529,7 @@ def get_unreceived_items(
     ).join(Order).filter(
         Order.property_id == property_id,
         Order.status.in_([OrderStatus.RECEIVED.value, OrderStatus.PARTIALLY_RECEIVED.value]),
-        OrderItem.shortage_dismissed == False  # Exclude dismissed shortages
+        (OrderItem.shortage_dismissed == False) | (OrderItem.shortage_dismissed.is_(None))  # Exclude dismissed shortages
     )
 
     items = query.order_by(Order.week_of.desc()).all()
