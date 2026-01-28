@@ -173,6 +173,8 @@ class SupplierPurchaseItem(BaseModel):
     item_id: int
     item_name: str
     category: Optional[str] = None
+    brand: Optional[str] = None  # Preferred brand
+    product_notes: Optional[str] = None  # Purchasing notes
     quantity: float
     unit: str
     unit_price: Optional[float] = None

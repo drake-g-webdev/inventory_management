@@ -36,7 +36,8 @@ class InventoryItem(Base):
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True, index=True)  # e.g., "Dairy", "Produce", "Protein"
     subcategory = Column(String(100), nullable=True, index=True)  # e.g., "BIB", "Cans/Bottles", "Dry"
-    brand = Column(String(255), nullable=True)
+    brand = Column(String(255), nullable=True)  # Preferred brand
+    product_notes = Column(Text, nullable=True)  # Purchasing notes (e.g., "individually wrapped")
 
     # Supplier info
     supplier_id = Column(Integer, ForeignKey("suppliers.id"), nullable=True)

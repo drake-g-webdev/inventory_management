@@ -91,6 +91,8 @@ export default function InventoryPage() {
     units_per_order_unit: null,
     category: '',
     subcategory: '',
+    brand: '',
+    product_notes: '',
     supplier_id: null,
     par_level: null,
     current_stock: 0,
@@ -158,6 +160,8 @@ export default function InventoryPage() {
         description: item.description,
         category: item.category || '',
         subcategory: item.subcategory || '',
+        brand: item.brand || '',
+        product_notes: item.product_notes || '',
         supplier_id: item.supplier_id,
         unit: item.unit,
         order_unit: item.order_unit,
@@ -177,6 +181,8 @@ export default function InventoryPage() {
         units_per_order_unit: null,
         category: '',
         subcategory: '',
+        brand: '',
+        product_notes: '',
         supplier_id: null,
         par_level: null,
         current_stock: 0,
@@ -200,6 +206,8 @@ export default function InventoryPage() {
       units_per_order_unit: null,
       category: category,
       subcategory: subcategory || '',
+      brand: '',
+      product_notes: '',
       supplier_id: null,
       par_level: null,
       current_stock: 0,
@@ -1291,6 +1299,32 @@ export default function InventoryPage() {
                   <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                 ))}
               </select>
+            </div>
+            {/* Preferred Brand & Product Notes */}
+            <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+              <p className="text-sm font-medium text-purple-800 mb-2">Purchasing Details</p>
+              <p className="text-xs text-purple-600 mb-3">
+                Specify the preferred brand and any special notes for ordering this item.
+              </p>
+              <div className="space-y-3">
+                <Input
+                  id="brand"
+                  label="Preferred Brand"
+                  placeholder="e.g., Kirkland, Sysco, etc."
+                  value={formData.brand || ''}
+                  onChange={(e) => setFormData({ ...formData, brand: e.target.value || null })}
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Notes</label>
+                  <textarea
+                    placeholder="e.g., individually wrapped, not in bulk bags"
+                    value={formData.product_notes || ''}
+                    onChange={(e) => setFormData({ ...formData, product_notes: e.target.value || null })}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+                  />
+                </div>
+              </div>
             </div>
             {/* Order Unit Configuration */}
             <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">

@@ -91,6 +91,8 @@ export interface InventoryItem {
   description: string | null;
   category: string | null;
   subcategory: string | null;
+  brand: string | null;  // Preferred brand
+  product_notes: string | null;  // Purchasing notes (e.g., "individually wrapped")
   supplier_id: number | null;
   supplier_name: string | null;
   unit: string;
@@ -353,6 +355,8 @@ export interface CreateInventoryItemPayload {
   description?: string | null;
   category?: string | null;
   subcategory?: string | null;
+  brand?: string | null;  // Preferred brand
+  product_notes?: string | null;  // Purchasing notes
   supplier_id?: number | null;
   unit: string;
   order_unit?: string | null;
@@ -425,6 +429,8 @@ export interface SupplierPurchaseItem {
   item_id: number;
   item_name: string;
   category: string | null;
+  brand: string | null;  // Preferred brand
+  product_notes: string | null;  // Purchasing notes
   quantity: number;
   unit: string;
   unit_price: number | null;

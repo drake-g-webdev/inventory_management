@@ -81,10 +81,18 @@ function SupplierCard({ supplier, defaultExpanded = false, showPricing = true }:
             <tbody className="bg-white divide-y divide-gray-200">
               {supplier.items.map((item, idx) => (
                 <tr key={`${item.order_id}-${item.item_id}-${idx}`} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Package className="h-4 w-4 text-gray-400 mr-2" />
-                      <span className="font-medium text-gray-900">{item.item_name}</span>
+                  <td className="px-6 py-4">
+                    <div className="flex items-start">
+                      <Package className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
+                      <div>
+                        <span className="font-medium text-gray-900">{item.item_name}</span>
+                        {item.brand && (
+                          <span className="ml-2 text-sm text-purple-600 font-medium">({item.brand})</span>
+                        )}
+                        {item.product_notes && (
+                          <p className="text-xs text-gray-500 mt-0.5">{item.product_notes}</p>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
@@ -179,7 +187,10 @@ export default function OrderPurchaseListPage() {
                 </tr>
                 ${groupedItems[category].map(item => `
                   <tr>
-                    <td class="item-col">${item.item_name}</td>
+                    <td class="item-col">
+                      ${item.item_name}${item.brand ? ` <span class="brand">(${item.brand})</span>` : ''}
+                      ${item.product_notes ? `<div class="product-notes">${item.product_notes}</div>` : ''}
+                    </td>
                     <td class="qty-col">${item.quantity}</td>
                     <td class="unit-col">${item.unit}</td>
                   </tr>
@@ -269,6 +280,8 @@ export default function OrderPurchaseListPage() {
             text-align: left;
           }
           .item-col { width: 60%; padding-left: 20px !important; }
+          .brand { color: #7c3aed; font-weight: 500; font-size: 12px; }
+          .product-notes { color: #6b7280; font-size: 11px; margin-top: 2px; }
           .qty-col { width: 20%; text-align: center; }
           .unit-col { width: 20%; text-align: center; }
           .footer {
