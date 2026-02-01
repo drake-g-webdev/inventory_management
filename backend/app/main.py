@@ -32,11 +32,17 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware - allow Railway domains and localhost
 allowed_origins = [
-    settings.FRONTEND_URL,
     "http://localhost:3001",
     "http://localhost:3005",
     "https://inventorymanagement-production-8ea8.up.railway.app",
 ]
+# Add FRONTEND_URL from settings if it exists and isn't already in the list
+if settings.FRONTEND_URL and settings.FRONTEND_URL not in allowed_origins:
+    allowed_origins.append(settings.FRONTEND_URL)
+
+# Filter out any None or empty values
+allowed_origins = [origin for origin in allowed_origins if origin]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
