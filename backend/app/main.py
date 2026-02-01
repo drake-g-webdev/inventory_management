@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 import os
 
 from app.core.config import settings
@@ -12,6 +13,28 @@ from app.api.router import api_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Add missing columns to existing tables (for deployments without migrations)
+def add_missing_columns():
+    """Add new columns to existing tables if they don't exist"""
+    with engine.connect() as conn:
+        # Check and add product_notes column to inventory_items
+        try:
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'inventory_items' AND column_name = 'product_notes'
+            """))
+            if not result.fetchone():
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN product_notes TEXT"))
+                conn.commit()
+                print("Added product_notes column to inventory_items table")
+        except Exception as e:
+            print(f"Note: Could not check/add product_notes column: {e}")
+
+try:
+    add_missing_columns()
+except Exception as e:
+    print(f"Warning: Could not run column migrations: {e}")
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
