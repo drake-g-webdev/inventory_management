@@ -718,7 +718,10 @@ export default function MasterProductsPage() {
               )}
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => handleOpenAssignModal(selectedProduct!)}>
+                <Button variant="outline" onClick={() => {
+                  setShowDetailsModal(false);
+                  handleOpenAssignModal(selectedProduct!);
+                }}>
                   <Plus className="h-4 w-4 mr-2" />
                   Assign to More Properties
                 </Button>
