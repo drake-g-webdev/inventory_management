@@ -94,6 +94,7 @@ export default function MasterProductsPage() {
     seasonal_availability: 'year_round',
     description: '',
     brand: '',
+    qty: '',
     product_notes: '',
     supplier_id: null,
     unit: 'unit',
@@ -162,6 +163,7 @@ export default function MasterProductsPage() {
         seasonal_availability: product.seasonal_availability || 'year_round',
         description: product.description || '',
         brand: product.brand || '',
+        qty: product.qty || '',
         product_notes: product.product_notes || '',
         supplier_id: product.supplier_id,
         unit: product.unit,
@@ -180,6 +182,7 @@ export default function MasterProductsPage() {
         seasonal_availability: 'year_round',
         description: '',
         brand: '',
+        qty: '',
         product_notes: '',
         supplier_id: null,
         unit: 'unit',
@@ -331,7 +334,10 @@ export default function MasterProductsPage() {
     <tr key={product.id} className="hover:bg-gray-50">
       <td className="px-6 py-4">
         <div>
-          <p className="font-medium text-gray-900">{product.name}</p>
+          <p className="font-medium text-gray-900">
+            {product.name}
+            {product.qty && <span className="text-gray-500 ml-1">- {product.qty}</span>}
+          </p>
           {product.brand && (
             <p className="text-sm text-purple-600">{product.brand}</p>
           )}
@@ -678,6 +684,16 @@ export default function MasterProductsPage() {
                 value={formData.brand || ''}
                 onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
               />
+              <Input
+                id="qty"
+                label="Qty (e.g., 50#, 5 Gal)"
+                value={formData.qty || ''}
+                onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
+                placeholder="50#"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Default Supplier</label>
                 <select

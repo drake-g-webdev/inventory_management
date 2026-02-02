@@ -25,6 +25,7 @@ class MasterProduct(Base):
     # Product details
     description = Column(Text, nullable=True)
     brand = Column(String(255), nullable=True)  # Preferred brand
+    qty = Column(String(50), nullable=True)  # Product size/quantity e.g., "50#", "5 Gal"
     product_notes = Column(Text, nullable=True)  # Purchasing notes (e.g., "individually wrapped")
 
     # Default supplier

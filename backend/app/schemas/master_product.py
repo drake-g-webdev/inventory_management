@@ -11,6 +11,7 @@ class MasterProductBase(BaseModel):
     seasonal_availability: Optional[str] = "year_round"  # midnight_sun, aurora, year_round
     description: Optional[str] = None
     brand: Optional[str] = None
+    qty: Optional[str] = None  # Product size e.g., "50#", "5 Gal"
     product_notes: Optional[str] = None
     supplier_id: Optional[int] = None
     unit: str = "unit"
@@ -32,6 +33,7 @@ class MasterProductUpdate(BaseModel):
     seasonal_availability: Optional[str] = None
     description: Optional[str] = None
     brand: Optional[str] = None
+    qty: Optional[str] = None
     product_notes: Optional[str] = None
     supplier_id: Optional[int] = None
     unit: Optional[str] = None
@@ -78,7 +80,7 @@ class AssignMasterProductRequest(BaseModel):
 class SyncFromMasterRequest(BaseModel):
     """Request to sync property items from master"""
     inventory_item_ids: List[int]
-    sync_fields: List[str] = ["name", "category", "subcategory", "brand", "product_notes", "supplier_id", "unit", "order_unit", "units_per_order_unit", "unit_price"]
+    sync_fields: List[str] = ["name", "category", "subcategory", "brand", "qty", "product_notes", "supplier_id", "unit", "order_unit", "units_per_order_unit", "unit_price"]
 
 
 class SeedFromPropertyRequest(BaseModel):

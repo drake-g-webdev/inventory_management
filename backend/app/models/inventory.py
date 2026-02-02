@@ -40,6 +40,7 @@ class InventoryItem(Base):
     category = Column(String(100), nullable=True, index=True)  # e.g., "Dairy", "Produce", "Protein"
     subcategory = Column(String(100), nullable=True, index=True)  # e.g., "BIB", "Cans/Bottles", "Dry"
     brand = Column(String(255), nullable=True)  # Preferred brand
+    qty = Column(String(50), nullable=True)  # Product size/quantity e.g., "50#", "5 Gal"
     product_notes = Column(Text, nullable=True)  # Purchasing notes (e.g., "individually wrapped")
 
     # Supplier info

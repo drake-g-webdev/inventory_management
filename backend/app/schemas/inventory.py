@@ -9,6 +9,7 @@ class InventoryItemBase(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     brand: Optional[str] = None  # Preferred brand
+    qty: Optional[str] = None  # Product size e.g., "50#", "5 Gal"
     product_notes: Optional[str] = None  # Purchasing notes (e.g., "individually wrapped")
     supplier_id: Optional[int] = None
     unit: str = "unit"  # Inventory/counting unit
@@ -33,6 +34,7 @@ class InventoryItemUpdate(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     brand: Optional[str] = None  # Preferred brand
+    qty: Optional[str] = None  # Product size e.g., "50#", "5 Gal"
     product_notes: Optional[str] = None  # Purchasing notes
     supplier_id: Optional[int] = None
     unit: Optional[str] = None

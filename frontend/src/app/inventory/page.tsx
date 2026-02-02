@@ -92,6 +92,7 @@ export default function InventoryPage() {
     category: '',
     subcategory: '',
     brand: '',
+    qty: '',
     product_notes: '',
     supplier_id: null,
     par_level: null,
@@ -161,6 +162,7 @@ export default function InventoryPage() {
         category: item.category || '',
         subcategory: item.subcategory || '',
         brand: item.brand || '',
+        qty: item.qty || '',
         product_notes: item.product_notes || '',
         supplier_id: item.supplier_id,
         unit: item.unit,
@@ -182,6 +184,7 @@ export default function InventoryPage() {
         category: '',
         subcategory: '',
         brand: '',
+        qty: '',
         product_notes: '',
         supplier_id: null,
         par_level: null,
@@ -207,6 +210,7 @@ export default function InventoryPage() {
       category: category,
       subcategory: subcategory || '',
       brand: '',
+      qty: '',
       product_notes: '',
       supplier_id: null,
       par_level: null,
@@ -486,7 +490,7 @@ export default function InventoryPage() {
         const item = row.item!;
         return `
           <tr>
-            <td class="item-name">${item.name}</td>
+            <td class="item-name">${item.name}${item.qty ? ` - ${item.qty}` : ''}</td>
             <td class="unit-cell">${item.unit}</td>
             <td class="count-cell"></td>
           </tr>
@@ -927,7 +931,10 @@ export default function InventoryPage() {
                                             <tr key={item.id} className={item.is_low_stock ? 'bg-yellow-50' : ''}>
                                               <td className="px-6 py-4 whitespace-nowrap">
                                                 <div>
-                                                  <span className="font-medium text-gray-900">{item.name}</span>
+                                                  <span className="font-medium text-gray-900">
+                                                    {item.name}
+                                                    {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
+                                                  </span>
                                                   {!item.is_recurring && (
                                                     <span className="ml-2 px-1.5 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">one-off</span>
                                                   )}
@@ -1027,7 +1034,10 @@ export default function InventoryPage() {
                                 <tr key={item.id} className={item.is_low_stock ? 'bg-yellow-50' : ''}>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <div>
-                                      <span className="font-medium text-gray-900">{item.name}</span>
+                                      <span className="font-medium text-gray-900">
+                                        {item.name}
+                                        {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
+                                      </span>
                                       {!item.is_recurring && (
                                         <span className="ml-2 px-1.5 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">one-off</span>
                                       )}
@@ -1154,7 +1164,10 @@ export default function InventoryPage() {
                     {oneOffItems.map((item) => (
                       <tr key={item.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="font-medium text-gray-900">{item.name}</span>
+                          <span className="font-medium text-gray-900">
+                            {item.name}
+                            {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {item.category || 'Uncategorized'}
@@ -1307,13 +1320,22 @@ export default function InventoryPage() {
                 Specify the preferred brand and any special notes for ordering this item.
               </p>
               <div className="space-y-3">
-                <Input
-                  id="brand"
-                  label="Preferred Brand"
-                  placeholder="e.g., Kirkland, Sysco, etc."
-                  value={formData.brand || ''}
-                  onChange={(e) => setFormData({ ...formData, brand: e.target.value || null })}
-                />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    id="brand"
+                    label="Preferred Brand"
+                    placeholder="e.g., Kirkland, Sysco"
+                    value={formData.brand || ''}
+                    onChange={(e) => setFormData({ ...formData, brand: e.target.value || null })}
+                  />
+                  <Input
+                    id="qty"
+                    label="Qty (e.g., 50#, 5 Gal)"
+                    placeholder="50#"
+                    value={formData.qty || ''}
+                    onChange={(e) => setFormData({ ...formData, qty: e.target.value || null })}
+                  />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Product Notes</label>
                   <textarea

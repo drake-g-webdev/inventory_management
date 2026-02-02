@@ -57,6 +57,32 @@ def add_missing_columns():
         except Exception as e:
             print(f"Note: Could not check/add seasonal_availability column: {e}")
 
+        # Check and add qty column to master_products
+        try:
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'master_products' AND column_name = 'qty'
+            """))
+            if not result.fetchone():
+                conn.execute(text("ALTER TABLE master_products ADD COLUMN qty VARCHAR(50)"))
+                conn.commit()
+                print("Added qty column to master_products table")
+        except Exception as e:
+            print(f"Note: Could not check/add qty column to master_products: {e}")
+
+        # Check and add qty column to inventory_items
+        try:
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'inventory_items' AND column_name = 'qty'
+            """))
+            if not result.fetchone():
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN qty VARCHAR(50)"))
+                conn.commit()
+                print("Added qty column to inventory_items table")
+        except Exception as e:
+            print(f"Note: Could not check/add qty column to inventory_items: {e}")
+
 try:
     add_missing_columns()
 except Exception as e:

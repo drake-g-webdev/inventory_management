@@ -92,6 +92,7 @@ export interface InventoryItem {
   category: string | null;
   subcategory: string | null;
   brand: string | null;  // Preferred brand
+  qty: string | null;  // Product size e.g., "50#", "5 Gal"
   product_notes: string | null;  // Purchasing notes (e.g., "individually wrapped")
   supplier_id: number | null;
   supplier_name: string | null;
@@ -356,6 +357,7 @@ export interface CreateInventoryItemPayload {
   category?: string | null;
   subcategory?: string | null;
   brand?: string | null;  // Preferred brand
+  qty?: string | null;  // Product size e.g., "50#", "5 Gal"
   product_notes?: string | null;  // Purchasing notes
   supplier_id?: number | null;
   unit: string;
@@ -586,6 +588,7 @@ export interface MasterProduct {
   seasonal_availability: string | null;  // midnight_sun, aurora, year_round
   description: string | null;
   brand: string | null;
+  qty: string | null;  // Product size e.g., "50#", "5 Gal"
   product_notes: string | null;
   supplier_id: number | null;
   supplier_name: string | null;
@@ -622,6 +625,7 @@ export interface CreateMasterProductPayload {
   seasonal_availability?: string | null;
   description?: string | null;
   brand?: string | null;
+  qty?: string | null;
   product_notes?: string | null;
   supplier_id?: number | null;
   unit?: string;
