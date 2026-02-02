@@ -583,6 +583,7 @@ export interface MasterProduct {
   sku: string | null;
   category: string | null;
   subcategory: string | null;
+  seasonal_availability: string | null;  // midnight_sun, aurora, year_round
   description: string | null;
   brand: string | null;
   product_notes: string | null;
@@ -618,6 +619,7 @@ export interface CreateMasterProductPayload {
   sku?: string | null;
   category?: string | null;
   subcategory?: string | null;
+  seasonal_availability?: string | null;
   description?: string | null;
   brand?: string | null;
   product_notes?: string | null;

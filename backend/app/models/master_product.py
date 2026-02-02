@@ -20,6 +20,7 @@ class MasterProduct(Base):
     # Categorization
     category = Column(String(100), nullable=True, index=True)
     subcategory = Column(String(100), nullable=True)
+    seasonal_availability = Column(String(50), nullable=True, default="year_round")  # midnight_sun, aurora, year_round
 
     # Product details
     description = Column(Text, nullable=True)

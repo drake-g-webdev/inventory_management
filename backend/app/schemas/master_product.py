@@ -8,6 +8,7 @@ class MasterProductBase(BaseModel):
     sku: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    seasonal_availability: Optional[str] = "year_round"  # midnight_sun, aurora, year_round
     description: Optional[str] = None
     brand: Optional[str] = None
     product_notes: Optional[str] = None
@@ -28,6 +29,7 @@ class MasterProductUpdate(BaseModel):
     sku: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
+    seasonal_availability: Optional[str] = None
     description: Optional[str] = None
     brand: Optional[str] = None
     product_notes: Optional[str] = None
