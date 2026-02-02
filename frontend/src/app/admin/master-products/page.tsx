@@ -25,6 +25,28 @@ import type { MasterProduct, CreateMasterProductPayload, Property } from '@/type
 import toast from 'react-hot-toast';
 import { UNITS } from '@/lib/constants';
 
+const SUBCATEGORIES: Record<string, string[]> = {
+  'Beverages': ['BIB', 'Cans/Bottles', 'Dry', 'Concentrate'],
+};
+
+function groupByCategory(items: MasterProduct[]) {
+  return items.reduce((acc, item) => {
+    const category = item.category || 'Uncategorized';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(item);
+    return acc;
+  }, {} as Record<string, MasterProduct[]>);
+}
+
+function groupBySubcategory(items: MasterProduct[]) {
+  return items.reduce((acc, item) => {
+    const subcategory = item.subcategory || 'Other';
+    if (!acc[subcategory]) acc[subcategory] = [];
+    acc[subcategory].push(item);
+    return acc;
+  }, {} as Record<string, MasterProduct[]>);
+}
+
 export default function MasterProductsPage() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -56,6 +78,10 @@ export default function MasterProductsPage() {
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<number[]>([]);
   const [seedPropertyId, setSeedPropertyId] = useState<number | ''>('');
 
+  // Collapsible state
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<CreateMasterProductPayload>({
@@ -79,6 +105,48 @@ export default function MasterProductsPage() {
 
   // Get unique categories
   const categories = Array.from(new Set(products.map(p => p.category).filter((c): c is string => Boolean(c))));
+
+  // Group products by category
+  const groupedProducts = groupByCategory(products);
+
+  const toggleCategory = (category: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(category)) {
+      newExpanded.delete(category);
+    } else {
+      newExpanded.add(category);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  const toggleSubcategory = (key: string) => {
+    const newExpanded = new Set(expandedSubcategories);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedSubcategories(newExpanded);
+  };
+
+  const expandAll = () => {
+    setExpandedCategories(new Set(Object.keys(groupedProducts)));
+    const allSubcategoryKeys: string[] = [];
+    Object.entries(groupedProducts).forEach(([category, categoryProducts]) => {
+      if (SUBCATEGORIES[category]) {
+        const subcategoryGroups = groupBySubcategory(categoryProducts);
+        Object.keys(subcategoryGroups).forEach(sub => {
+          allSubcategoryKeys.push(`${category}:${sub}`);
+        });
+      }
+    });
+    setExpandedSubcategories(new Set(allSubcategoryKeys));
+  };
+
+  const collapseAll = () => {
+    setExpandedCategories(new Set());
+    setExpandedSubcategories(new Set());
+  };
 
   const handleOpenEditModal = (product?: MasterProduct) => {
     if (product) {
@@ -139,6 +207,13 @@ export default function MasterProductsPage() {
       } else {
         await createProduct.mutateAsync(payload);
         toast.success('Product created successfully');
+      }
+      // Auto-expand the category
+      if (formData.category) {
+        setExpandedCategories(prev => new Set([...Array.from(prev), formData.category!]));
+        if (formData.subcategory) {
+          setExpandedSubcategories(prev => new Set([...Array.from(prev), `${formData.category}:${formData.subcategory}`]));
+        }
       }
       setShowEditModal(false);
     } catch (error: any) {
@@ -235,6 +310,66 @@ export default function MasterProductsPage() {
     !productDetails?.assignments?.some(a => a.property_id === prop.id)
   );
 
+  // Render a product row
+  const renderProductRow = (product: MasterProduct) => (
+    <tr key={product.id} className="hover:bg-gray-50">
+      <td className="px-6 py-4">
+        <div>
+          <p className="font-medium text-gray-900">{product.name}</p>
+          {product.brand && (
+            <p className="text-sm text-purple-600">{product.brand}</p>
+          )}
+          {product.sku && (
+            <p className="text-xs text-gray-400">SKU: {product.sku}</p>
+          )}
+        </div>
+      </td>
+      <td className="px-6 py-4 text-sm text-gray-500">
+        {product.unit}
+        {product.order_unit && product.order_unit !== product.unit && (
+          <span className="text-gray-400"> (order: {product.order_unit})</span>
+        )}
+      </td>
+      <td className="px-6 py-4 text-sm text-gray-500">
+        {product.supplier_name || '-'}
+      </td>
+      <td className="px-6 py-4 text-center">
+        <button
+          onClick={() => handleViewDetails(product)}
+          className="inline-flex items-center px-2 py-1 text-sm rounded-full bg-blue-100 text-blue-800 hover:bg-blue-200"
+        >
+          <Building2 className="h-3 w-3 mr-1" />
+          {product.assigned_property_count}
+        </button>
+      </td>
+      <td className="px-6 py-4 text-right">
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => handleOpenAssignModal(product)}
+            className="text-blue-600 hover:text-blue-900 p-1"
+            title="Assign to properties"
+          >
+            <Link className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleOpenEditModal(product)}
+            className="text-primary-600 hover:text-primary-900 p-1"
+            title="Edit"
+          >
+            <Edit2 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleDelete(product.id)}
+            className="text-red-600 hover:text-red-900 p-1"
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+
   return (
     <RoleGuard allowedRoles={['admin']}>
       <DashboardLayout>
@@ -289,101 +424,153 @@ export default function MasterProductsPage() {
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
+              <div className="flex gap-2">
+                <button
+                  onClick={expandAll}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                >
+                  Expand All
+                </button>
+                <button
+                  onClick={collapseAll}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                >
+                  Collapse All
+                </button>
+              </div>
               <Button variant="outline" onClick={() => refetch()}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          {/* Products Table */}
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            {isLoading ? (
-              <div className="p-8 text-center text-gray-500">Loading...</div>
-            ) : products.length === 0 ? (
-              <div className="p-8 text-center">
-                <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No master products found</p>
-                <p className="text-sm text-gray-400 mt-1">Create products or seed from an existing camp inventory</p>
-              </div>
-            ) : (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Assigned</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {products.map((product) => (
-                    <tr key={product.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="font-medium text-gray-900">{product.name}</p>
-                          {product.brand && (
-                            <p className="text-sm text-purple-600">{product.brand}</p>
-                          )}
-                          {product.sku && (
-                            <p className="text-xs text-gray-400">SKU: {product.sku}</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {product.category || '-'}
-                        {product.subcategory && <span className="text-gray-400"> / {product.subcategory}</span>}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {product.unit}
-                        {product.order_unit && product.order_unit !== product.unit && (
-                          <span className="text-gray-400"> (order: {product.order_unit})</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {product.supplier_name || '-'}
-                      </td>
-                      <td className="px-6 py-4 text-center">
+          {/* Products by Category */}
+          {isLoading ? (
+            <div className="bg-white rounded-xl shadow-sm p-8 text-center text-gray-500">Loading...</div>
+          ) : products.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+              <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">No master products found</p>
+              <p className="text-sm text-gray-400 mt-1">Create products or seed from an existing camp inventory</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(groupedProducts)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([category, categoryProducts]) => {
+                  const isExpanded = expandedCategories.has(category);
+
+                  return (
+                    <div key={category} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                      <div className="w-full px-6 py-4 flex items-center justify-between bg-gray-50">
                         <button
-                          onClick={() => handleViewDetails(product)}
-                          className="inline-flex items-center px-2 py-1 text-sm rounded-full bg-blue-100 text-blue-800 hover:bg-blue-200"
+                          onClick={() => toggleCategory(category)}
+                          className="flex items-center flex-1 hover:bg-gray-100 -ml-2 pl-2 py-1 rounded transition-colors"
                         >
-                          <Building2 className="h-3 w-3 mr-1" />
-                          {product.assigned_property_count}
+                          {isExpanded ? (
+                            <ChevronDown className="h-5 w-5 text-gray-500 mr-2" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-gray-500 mr-2" />
+                          )}
+                          <span className="font-semibold text-gray-900">{category}</span>
+                          <span className="ml-2 text-sm text-gray-500">
+                            ({categoryProducts.length} products)
+                          </span>
                         </button>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => handleOpenAssignModal(product)}
-                            className="text-blue-600 hover:text-blue-900 p-1"
-                            title="Assign to properties"
-                          >
-                            <Link className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenEditModal(product)}
-                            className="text-primary-600 hover:text-primary-900 p-1"
-                            title="Edit"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(product.id)}
-                            className="text-red-600 hover:text-red-900 p-1"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="divide-y divide-gray-100">
+                          {/* Check if this category has subcategories */}
+                          {SUBCATEGORIES[category] ? (
+                            // Render with subcategory collapsibles
+                            <div className="divide-y divide-gray-200">
+                              {Object.entries(groupBySubcategory(categoryProducts))
+                                .sort(([a], [b]) => {
+                                  const order = SUBCATEGORIES[category];
+                                  const aIndex = order.indexOf(a);
+                                  const bIndex = order.indexOf(b);
+                                  if (a === 'Other') return 1;
+                                  if (b === 'Other') return -1;
+                                  if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+                                  if (aIndex === -1) return 1;
+                                  if (bIndex === -1) return -1;
+                                  return aIndex - bIndex;
+                                })
+                                .map(([subcategory, subcategoryProducts]) => {
+                                  const subKey = `${category}:${subcategory}`;
+                                  const isSubExpanded = expandedSubcategories.has(subKey);
+
+                                  return (
+                                    <div key={subKey}>
+                                      <div className="w-full px-6 py-3 flex items-center justify-between bg-gray-100 border-l-4 border-primary-400">
+                                        <button
+                                          onClick={() => toggleSubcategory(subKey)}
+                                          className="flex items-center flex-1 hover:bg-gray-200 -ml-2 pl-2 py-1 rounded transition-colors"
+                                        >
+                                          {isSubExpanded ? (
+                                            <ChevronDown className="h-4 w-4 text-gray-500 mr-2" />
+                                          ) : (
+                                            <ChevronRight className="h-4 w-4 text-gray-500 mr-2" />
+                                          )}
+                                          <span className="font-medium text-gray-700">{subcategory}</span>
+                                          <span className="ml-2 text-sm text-gray-500">
+                                            ({subcategoryProducts.length} products)
+                                          </span>
+                                        </button>
+                                      </div>
+
+                                      {isSubExpanded && (
+                                        <table className="min-w-full">
+                                          <thead className="bg-gray-50">
+                                            <tr>
+                                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                                              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Assigned</th>
+                                              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="bg-white divide-y divide-gray-200">
+                                            {subcategoryProducts.map(renderProductRow)}
+                                          </tbody>
+                                        </table>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          ) : (
+                            // No subcategories - render flat table
+                            <table className="min-w-full">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Assigned</th>
+                                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {categoryProducts.map(renderProductRow)}
+                              </tbody>
+                            </table>
+                          )}
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+
+          {/* Summary */}
+          {products.length > 0 && (
+            <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-600">
+              <strong>Master Products</strong>: {products.length} total products across {Object.keys(groupedProducts).length} categories
+            </div>
+          )}
         </div>
 
         {/* Edit/Create Modal */}
