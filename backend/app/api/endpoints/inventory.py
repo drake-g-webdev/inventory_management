@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -1296,3 +1297,81 @@ async def get_printable_list_with_sorting(
         "categories_sorted": categories_sorted,
         "total_items": len(printable_items)
     }
+
+
+@router.get("/export/{property_id}")
+def export_inventory_csv(
+    property_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Export inventory items to CSV (admin only)"""
+    import csv
+    from io import StringIO
+
+    # Get property
+    prop = db.query(Property).filter(Property.id == property_id).first()
+    if not prop:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    # Get all inventory items for this property
+    items = db.query(InventoryItem).filter(
+        InventoryItem.property_id == property_id
+    ).order_by(InventoryItem.category, InventoryItem.name).all()
+
+    # Create CSV in memory
+    output = StringIO()
+    writer = csv.writer(output)
+
+    # Write header
+    writer.writerow([
+        'id',
+        'name',
+        'description',
+        'category',
+        'subcategory',
+        'brand',
+        'product_notes',
+        'supplier_name',
+        'unit',
+        'order_unit',
+        'units_per_order_unit',
+        'unit_price',
+        'par_level',
+        'current_stock',
+        'avg_weekly_usage',
+        'is_recurring',
+        'is_active'
+    ])
+
+    # Write rows
+    for item in items:
+        writer.writerow([
+            item.id,
+            item.name,
+            item.description or '',
+            item.category or '',
+            item.subcategory or '',
+            item.brand or '',
+            getattr(item, 'product_notes', '') or '',
+            item.supplier.name if item.supplier else '',
+            item.unit,
+            item.order_unit or '',
+            item.units_per_order_unit or '',
+            item.unit_price or '',
+            item.par_level or '',
+            item.current_stock or 0,
+            item.avg_weekly_usage or '',
+            item.is_recurring,
+            item.is_active
+        ])
+
+    # Return as downloadable CSV
+    output.seek(0)
+    filename = f"inventory_{prop.code}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

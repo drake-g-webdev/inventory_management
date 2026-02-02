@@ -202,8 +202,12 @@ export function useUpdateOrderItem() {
 export function useUpdateDraftOrderItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ orderId, itemId, quantity }: { orderId: number; itemId: number; quantity: number }) => {
-      const response = await api.patch(`/orders/${orderId}/items/${itemId}`, null, { params: { quantity } });
+    mutationFn: async ({ orderId, itemId, quantity, unit }: { orderId: number; itemId: number; quantity: number; unit?: string }) => {
+      const params: { quantity: number; unit?: string } = { quantity };
+      if (unit) {
+        params.unit = unit;
+      }
+      const response = await api.patch(`/orders/${orderId}/items/${itemId}`, null, { params });
       return response.data;
     },
     onSuccess: () => {

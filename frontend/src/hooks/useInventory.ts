@@ -12,6 +12,8 @@ export function useInventoryItems(propertyId?: number) {
       const response = await api.get<InventoryItem[]>('/inventory/items', { params });
       return response.data;
     },
+    staleTime: 30 * 1000, // 30 seconds - inventory changes frequently
+    refetchOnWindowFocus: true, // Refetch when user returns to window
   });
 }
 
@@ -73,6 +75,8 @@ export function useLowStockItems(propertyId?: number) {
       const response = await api.get<InventoryItem[]>('/inventory/items', { params });
       return response.data;
     },
+    staleTime: 30 * 1000, // 30 seconds - stock levels change frequently
+    refetchOnWindowFocus: true, // Refetch when user returns to window
   });
 }
 

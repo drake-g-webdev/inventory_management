@@ -1133,10 +1133,11 @@ def update_draft_order_item(
     order_id: int,
     item_id: int,
     quantity: int = Query(..., ge=1),
+    unit: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update item quantity in draft or changes_requested order (for camp worker)"""
+    """Update item quantity and/or unit in draft or changes_requested order (for camp worker)"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1159,6 +1160,8 @@ def update_draft_order_item(
         raise HTTPException(status_code=404, detail="Order item not found")
 
     item.requested_quantity = quantity
+    if unit is not None:
+        item.unit = unit
 
     # Recalculate order total
     order.estimated_total = calculate_order_total(order)

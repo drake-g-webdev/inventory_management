@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Trash2, Plus, Send, Search, AlertTriangle, Package, ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { ArrowLeft, Trash2, Plus, Send, Search, AlertTriangle, Package, ChevronDown, ChevronRight, Check, RefreshCw } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
@@ -20,7 +20,7 @@ export default function EditOrderPage() {
   const { user } = useAuthStore();
 
   const { data: order, isLoading: orderLoading, refetch } = useOrder(orderId);
-  const { data: inventory = [] } = useInventoryItems(user?.property_id || undefined);
+  const { data: inventory = [], refetch: refetchInventory, isFetching: inventoryFetching } = useInventoryItems(user?.property_id || undefined);
   const updateItem = useUpdateDraftOrderItem();
   const deleteItem = useDeleteOrderItem();
   const addItem = useAddOrderItem();
@@ -100,6 +100,22 @@ export default function EditOrderPage() {
     } catch (error: any) {
       toast.error('Failed to update quantity');
     }
+  };
+
+  const handleUnitChange = async (itemId: number, currentQty: number, newUnit: string) => {
+    try {
+      await updateItem.mutateAsync({ orderId, itemId, quantity: currentQty, unit: newUnit });
+      refetch();
+    } catch (error: any) {
+      toast.error('Failed to update unit');
+    }
+  };
+
+  // Helper to get the current order unit from inventory for an item
+  const getInventoryOrderUnit = (inventoryItemId: number | null | undefined) => {
+    if (!inventoryItemId) return null;
+    const invItem = inventory.find(i => i.id === inventoryItemId);
+    return invItem?.effective_order_unit || invItem?.unit || null;
   };
 
   const handleDeleteItem = async (itemId: number) => {
@@ -339,10 +355,21 @@ export default function EditOrderPage() {
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h2 className="font-semibold text-gray-900">Order Items ({order.items?.length || 0})</h2>
-              <Button variant="outline" size="sm" onClick={() => setShowAddItem(!showAddItem)}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add Item
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { refetch(); refetchInventory(); }}
+                  disabled={inventoryFetching}
+                  title="Refresh stock levels"
+                >
+                  <RefreshCw className={`h-4 w-4 ${inventoryFetching ? 'animate-spin' : ''}`} />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowAddItem(!showAddItem)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Item
+                </Button>
+              </div>
             </div>
 
             {/* Add Item Section */}
@@ -452,8 +479,33 @@ export default function EditOrderPage() {
                           className="w-20 mx-auto block text-center px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
                         />
                       </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-500">
-                        {item.unit}
+                      <td className="px-6 py-4 text-center text-sm">
+                        {(() => {
+                          const currentInventoryUnit = getInventoryOrderUnit(item.inventory_item_id);
+                          const unitMismatch = currentInventoryUnit && item.unit !== currentInventoryUnit;
+                          return (
+                            <div className="flex flex-col items-center gap-1">
+                              <select
+                                value={item.unit || ''}
+                                onChange={(e) => handleUnitChange(item.id, item.requested_quantity, e.target.value)}
+                                className={`px-2 py-1 border rounded text-sm focus:ring-2 focus:ring-primary-500 ${unitMismatch ? 'border-amber-400 bg-amber-50' : 'border-gray-300'}`}
+                              >
+                                {UNITS.map(u => (
+                                  <option key={u} value={u}>{u}</option>
+                                ))}
+                              </select>
+                              {unitMismatch && (
+                                <button
+                                  onClick={() => handleUnitChange(item.id, item.requested_quantity, currentInventoryUnit)}
+                                  className="text-xs text-amber-600 hover:text-amber-800 underline"
+                                  title={`Update to ${currentInventoryUnit} (current inventory setting)`}
+                                >
+                                  Use {currentInventoryUnit}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button

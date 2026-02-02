@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, Building2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Building2, Download } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import Modal from '@/components/ui/Modal';
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from '@/hooks/useProperties';
 import type { Property, CreatePropertyPayload } from '@/types';
 import toast from 'react-hot-toast';
+import api from '@/lib/api';
 
 export default function PropertiesPage() {
   const { data: properties = [], isLoading } = useProperties();
@@ -70,6 +71,28 @@ export default function PropertiesPage() {
     }
   };
 
+  const handleExportInventory = async (property: Property) => {
+    try {
+      const response = await api.get(`/inventory/export/${property.id}`, {
+        responseType: 'blob'
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `inventory_${property.code}_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${property.name} inventory`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Export failed');
+    }
+  };
+
   return (
     <RoleGuard allowedRoles={['admin']}>
       <DashboardLayout>
@@ -106,6 +129,13 @@ export default function PropertiesPage() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => handleExportInventory(property)}
+                        className="text-green-600 hover:text-green-900"
+                        title="Export inventory to CSV"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
                       <button onClick={() => handleOpenModal(property)} className="text-primary-600 hover:text-primary-900">
                         <Edit2 className="h-4 w-4" />
                       </button>
