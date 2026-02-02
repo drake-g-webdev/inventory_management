@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Plus, Edit2, Trash2, Package, Search, Upload, Download, Link, RefreshCw, Building2, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, Search, Upload, Download, Link, Unlink, RefreshCw, Building2, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import RoleGuard from '@/components/auth/RoleGuard';
 import Button from '@/components/ui/Button';
@@ -14,6 +14,7 @@ import {
   useUpdateMasterProduct,
   useDeleteMasterProduct,
   useAssignMasterProduct,
+  useUnassignMasterProduct,
   useSyncFromMaster,
   useSeedFromProperty,
   useUploadMasterProductsCSV,
@@ -63,6 +64,7 @@ export default function MasterProductsPage() {
   const updateProduct = useUpdateMasterProduct();
   const deleteProduct = useDeleteMasterProduct();
   const assignProduct = useAssignMasterProduct();
+  const unassignProduct = useUnassignMasterProduct();
   const syncFromMaster = useSyncFromMaster();
   const seedFromProperty = useSeedFromProperty();
   const uploadCSV = useUploadMasterProductsCSV();
@@ -269,6 +271,17 @@ export default function MasterProductsPage() {
       refetch();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Sync failed');
+    }
+  };
+
+  const handleUnassign = async (productId: number, propertyId: number, propertyName: string) => {
+    if (!confirm(`Remove this product from ${propertyName}? This will delete the inventory item.`)) return;
+    try {
+      const result = await unassignProduct.mutateAsync({ productId, propertyId });
+      toast.success(result.message);
+      refetch();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Unassign failed');
     }
   };
 
@@ -968,6 +981,13 @@ export default function MasterProductsPage() {
                             </button>
                           </>
                         )}
+                        <button
+                          onClick={() => handleUnassign(selectedProduct!.id, assignment.property_id, assignment.property_name)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="Remove from property"
+                        >
+                          <Unlink className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                   ))}

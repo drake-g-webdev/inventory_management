@@ -94,6 +94,20 @@ export function useAssignMasterProduct() {
   });
 }
 
+export function useUnassignMasterProduct() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ productId, propertyId }: { productId: number; propertyId: number }) => {
+      const response = await api.delete(`/master-products/${productId}/unassign/${propertyId}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['master-products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
 export function useSyncFromMaster() {
   const queryClient = useQueryClient();
   return useMutation({

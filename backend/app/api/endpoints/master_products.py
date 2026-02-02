@@ -458,6 +458,40 @@ def assign_to_properties(
     }
 
 
+@router.delete("/{product_id}/unassign/{property_id}")
+def unassign_from_property(
+    product_id: int,
+    property_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Remove a master product assignment from a property (deletes the inventory item)"""
+    # Find the inventory item linked to this master product for this property
+    inventory_item = db.query(InventoryItem).filter(
+        InventoryItem.master_product_id == product_id,
+        InventoryItem.property_id == property_id
+    ).first()
+
+    if not inventory_item:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    # Get property name for response
+    prop = db.query(Property).filter(Property.id == property_id).first()
+    property_name = prop.name if prop else "Unknown"
+
+    # Delete the inventory item
+    item_id = inventory_item.id
+    db.delete(inventory_item)
+    db.commit()
+
+    return {
+        "message": f"Unassigned from {property_name}",
+        "deleted_inventory_item_id": item_id,
+        "property_id": property_id,
+        "property_name": property_name
+    }
+
+
 @router.post("/sync-from-master")
 def sync_items_from_master(
     request: SyncFromMasterRequest,
