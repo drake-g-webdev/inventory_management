@@ -414,7 +414,7 @@ export default function InventoryPage() {
       const today = new Date().toLocaleDateString();
 
       // Group items by category first
-      type ItemWithMeta = { id: number; name: string; category: string | null; subcategory: string | null; unit: string; par_level: number | null; current_stock: number; sort_order: number; categoryName: string; subcategoryName: string | null };
+      type ItemWithMeta = { id: number; name: string; category: string | null; subcategory: string | null; unit: string; qty: string | null; par_level: number | null; current_stock: number; sort_order: number; categoryName: string; subcategoryName: string | null };
       type RowData = { type: 'category' | 'subcategory' | 'item'; content: string; item?: ItemWithMeta };
 
       // Build category groups with items - items are already sorted by sort_order from the backend
