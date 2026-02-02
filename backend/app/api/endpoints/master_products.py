@@ -419,10 +419,11 @@ def seed_from_property(
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
 
-    # Get items to seed
+    # Get items to seed (only recurring items - non-recurring are one-time purchases)
     query = db.query(InventoryItem).filter(
         InventoryItem.property_id == request.property_id,
         InventoryItem.is_active == True,
+        InventoryItem.is_recurring == True,  # Only seed recurring items to master
         InventoryItem.master_product_id.is_(None)  # Not already linked
     )
 
