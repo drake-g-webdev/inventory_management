@@ -731,10 +731,10 @@ export default function MasterProductsPage() {
                 id="units_per_order_unit"
                 label="Units per Order Unit"
                 type="number"
-                min="0"
-                step="0.1"
+                min="1"
+                step="1"
                 value={formData.units_per_order_unit || ''}
-                onChange={(e) => setFormData({ ...formData, units_per_order_unit: e.target.value ? parseFloat(e.target.value) : null })}
+                onChange={(e) => setFormData({ ...formData, units_per_order_unit: e.target.value ? parseInt(e.target.value, 10) : null })}
               />
             </div>
 
