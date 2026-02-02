@@ -78,7 +78,7 @@ export default function MasterProductsPage() {
   const { data: productDetails } = useMasterProduct(selectedProduct?.id || 0);
 
   // Get unique categories
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
+  const categories = Array.from(new Set(products.map(p => p.category).filter((c): c is string => Boolean(c))));
 
   const handleOpenEditModal = (product?: MasterProduct) => {
     if (product) {
