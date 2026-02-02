@@ -151,3 +151,17 @@ export function useUnlinkedInventoryItems(propertyId?: number) {
     },
   });
 }
+
+export function useCleanupNonRecurring() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.delete('/master-products/cleanup-non-recurring');
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['master-products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
