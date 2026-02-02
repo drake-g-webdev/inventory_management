@@ -602,19 +602,35 @@ export default function MasterProductsPage() {
                 id="category"
                 label="Category"
                 value={formData.category || ''}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value, subcategory: '' })}
                 list="categories"
               />
               <datalist id="categories">
                 {categories.map(cat => <option key={cat} value={cat} />)}
               </datalist>
 
-              <Input
-                id="subcategory"
-                label="Subcategory"
-                value={formData.subcategory || ''}
-                onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-              />
+              {formData.category && SUBCATEGORIES[formData.category] ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Subcategory</label>
+                  <select
+                    value={formData.subcategory || ''}
+                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Select Subcategory</option>
+                    {SUBCATEGORIES[formData.category].map(sub => (
+                      <option key={sub} value={sub}>{sub}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <Input
+                  id="subcategory"
+                  label="Subcategory"
+                  value={formData.subcategory || ''}
+                  onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+                />
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
