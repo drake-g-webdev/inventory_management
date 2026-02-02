@@ -28,6 +28,7 @@ class Supplier(Base):
 
     # Relationships
     inventory_items = relationship("InventoryItem", back_populates="supplier")
+    master_products = relationship("MasterProduct", back_populates="supplier")
     order_items = relationship("OrderItem", back_populates="supplier")
     receipts = relationship("Receipt", back_populates="supplier")
     receipt_aliases = relationship("ReceiptCodeAlias", back_populates="supplier")

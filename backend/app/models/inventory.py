@@ -32,6 +32,9 @@ class InventoryItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=False, index=True)
 
+    # Link to master product (optional - for organization-wide products)
+    master_product_id = Column(Integer, ForeignKey("master_products.id"), nullable=True, index=True)
+
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text, nullable=True)
     category = Column(String(100), nullable=True, index=True)  # e.g., "Dairy", "Produce", "Protein"
@@ -79,6 +82,7 @@ class InventoryItem(Base):
     # Relationships
     camp_property = relationship("Property", back_populates="inventory_items")
     supplier = relationship("Supplier", back_populates="inventory_items")
+    master_product = relationship("MasterProduct", back_populates="inventory_items")
     inventory_counts = relationship("InventoryCountItem", back_populates="inventory_item")
     order_items = relationship("OrderItem", back_populates="inventory_item")
     receipt_aliases = relationship("ReceiptCodeAlias", back_populates="inventory_item", cascade="all, delete-orphan")

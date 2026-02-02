@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   CheckCircle,
   X,
+  Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -31,6 +32,7 @@ const navigation: NavItem[] = [
   // Admin only
   { name: 'Users', href: '/admin/users', icon: Users, roles: ['admin'] },
   { name: 'Properties', href: '/admin/properties', icon: Building2, roles: ['admin'] },
+  { name: 'Master Products', href: '/admin/master-products', icon: Layers, roles: ['admin'] },
   { name: 'Receipts', href: '/admin/receipts', icon: Receipt, roles: ['admin'] },
   { name: 'Seed Inventory', href: '/admin/seed-inventory', icon: Package, roles: ['admin'] },
   // Camp Worker

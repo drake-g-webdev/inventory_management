@@ -31,6 +31,19 @@ def add_missing_columns():
         except Exception as e:
             print(f"Note: Could not check/add product_notes column: {e}")
 
+        # Check and add master_product_id column to inventory_items
+        try:
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'inventory_items' AND column_name = 'master_product_id'
+            """))
+            if not result.fetchone():
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN master_product_id INTEGER REFERENCES master_products(id)"))
+                conn.commit()
+                print("Added master_product_id column to inventory_items table")
+        except Exception as e:
+            print(f"Note: Could not check/add master_product_id column: {e}")
+
 try:
     add_missing_columns()
 except Exception as e:

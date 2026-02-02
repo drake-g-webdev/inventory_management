@@ -575,3 +575,85 @@ export interface UnreceivedItemsList {
   total_count: number;
   total_shortage_value: number;
 }
+
+// Master Product System
+export interface MasterProduct {
+  id: number;
+  name: string;
+  sku: string | null;
+  category: string | null;
+  subcategory: string | null;
+  description: string | null;
+  brand: string | null;
+  product_notes: string | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  unit: string;
+  order_unit: string | null;
+  units_per_order_unit: number | null;
+  unit_price: number | null;
+  default_par_level: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+  assigned_property_count: number;
+}
+
+export interface PropertyAssignment {
+  property_id: number;
+  property_name: string;
+  property_code: string;
+  inventory_item_id: number;
+  current_stock: number;
+  par_level: number | null;
+  is_synced: boolean;
+}
+
+export interface MasterProductWithAssignments extends MasterProduct {
+  assignments: PropertyAssignment[];
+}
+
+export interface CreateMasterProductPayload {
+  name: string;
+  sku?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  description?: string | null;
+  brand?: string | null;
+  product_notes?: string | null;
+  supplier_id?: number | null;
+  unit?: string;
+  order_unit?: string | null;
+  units_per_order_unit?: number | null;
+  unit_price?: number | null;
+  default_par_level?: number | null;
+}
+
+export interface UpdateMasterProductPayload extends Partial<CreateMasterProductPayload> {
+  is_active?: boolean;
+}
+
+export interface AssignMasterProductRequest {
+  property_ids: number[];
+  par_level?: number | null;
+}
+
+export interface SyncFromMasterRequest {
+  inventory_item_ids: number[];
+  sync_fields?: string[];
+}
+
+export interface SeedFromPropertyRequest {
+  property_id: number;
+  item_ids?: number[] | null;
+}
+
+export interface UnlinkedInventoryItem {
+  id: number;
+  name: string;
+  category: string | null;
+  unit: string;
+  property_id: number;
+  property_name: string | null;
+  property_code: string | null;
+}
