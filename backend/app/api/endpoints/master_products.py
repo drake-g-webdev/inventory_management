@@ -491,6 +491,64 @@ def seed_from_property(
     }
 
 
+@router.delete("/cleanup-non-recurring")
+def cleanup_non_recurring_master_products(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove master products that were incorrectly seeded from non-recurring items.
+    - Deletes master products only linked to non-recurring items
+    - Unlinks non-recurring items from master products that also have recurring items
+    """
+    # Find all master products linked to non-recurring inventory items
+    non_recurring_items = db.query(InventoryItem).filter(
+        InventoryItem.master_product_id.isnot(None),
+        InventoryItem.is_recurring == False
+    ).all()
+
+    unlinked_count = 0
+    deleted_master_ids = set()
+    deleted_names = []
+
+    for item in non_recurring_items:
+        master_id = item.master_product_id
+        if master_id in deleted_master_ids:
+            continue
+
+        # Check if this master product has any recurring items
+        has_recurring = db.query(InventoryItem).filter(
+            InventoryItem.master_product_id == master_id,
+            InventoryItem.is_recurring == True
+        ).first() is not None
+
+        if has_recurring:
+            # Just unlink this non-recurring item
+            item.master_product_id = None
+            unlinked_count += 1
+        else:
+            # No recurring items - delete the master product entirely
+            master = db.query(MasterProduct).filter(MasterProduct.id == master_id).first()
+            if master:
+                deleted_names.append(master.name)
+                # First unlink all items from this master
+                db.query(InventoryItem).filter(
+                    InventoryItem.master_product_id == master_id
+                ).update({"master_product_id": None})
+                # Then delete the master product
+                db.delete(master)
+                deleted_master_ids.add(master_id)
+
+    db.commit()
+
+    return {
+        "message": f"Cleanup complete",
+        "deleted_master_products": len(deleted_master_ids),
+        "deleted_names": deleted_names,
+        "unlinked_items": unlinked_count
+    }
+
+
 @router.post("/upload-csv", response_model=CSVUploadResponse)
 async def upload_master_products_csv(
     file: UploadFile = File(...),
