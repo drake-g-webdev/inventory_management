@@ -673,3 +673,31 @@ export interface UnlinkedInventoryItem {
   property_name: string | null;
   property_code: string | null;
 }
+
+// Item Trends (Admin visualization)
+export interface OrderDataPoint {
+  date: string;
+  requested_qty: number;
+  approved_qty: number | null;
+  received_qty: number | null;
+  order_number: string | null;
+  status: string | null;
+}
+
+export interface CountDataPoint {
+  date: string;
+  quantity: number;
+}
+
+export interface ItemTrendsData {
+  item_id: number;
+  item_name: string;
+  property_name: string | null;
+  unit: string | null;
+  par_level: number | null;
+  order_at: number | null;
+  current_stock: number | null;
+  avg_weekly_usage: number | null;
+  order_points: OrderDataPoint[];
+  count_points: CountDataPoint[];
+}

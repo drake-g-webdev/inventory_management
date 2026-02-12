@@ -15,11 +15,38 @@ from app.models.user import User
 from app.models.property import Property
 from app.models.order import Order, OrderItem, OrderStatus, OrderItemFlag
 from app.models.supplier import Supplier
-from app.models.inventory import InventoryItem
+from app.models.inventory import InventoryItem, InventoryCount, InventoryCountItem
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+# ============== TREND SCHEMAS ==============
+
+class OrderDataPoint(BaseModel):
+    date: str
+    requested_qty: float
+    approved_qty: Optional[float] = None
+    received_qty: Optional[float] = None
+    order_number: Optional[str] = None
+    status: Optional[str] = None
+
+class CountDataPoint(BaseModel):
+    date: str
+    quantity: float
+
+class ItemTrendsResponse(BaseModel):
+    item_id: int
+    item_name: str
+    property_name: Optional[str] = None
+    unit: Optional[str] = None
+    par_level: Optional[float] = None
+    order_at: Optional[float] = None
+    current_stock: Optional[float] = None
+    avg_weekly_usage: Optional[float] = None
+    order_points: List[OrderDataPoint] = []
+    count_points: List[CountDataPoint] = []
 
 
 # ============== SCHEMAS ==============
@@ -670,3 +697,76 @@ def list_properties_for_admin(
     """List all properties for admin seed dropdown"""
     properties = db.query(Property).filter(Property.is_active == True).all()
     return [{"id": p.id, "name": p.name, "code": p.code} for p in properties]
+
+
+@router.get("/item-trends/{item_id}", response_model=ItemTrendsResponse)
+def get_item_trends(
+    item_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get order and inventory count trend data for a specific inventory item."""
+    # Look up inventory item
+    inv_item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not inv_item:
+        raise HTTPException(status_code=404, detail="Inventory item not found")
+
+    # Get property name
+    prop = db.query(Property).filter(Property.id == inv_item.property_id).first()
+    property_name = prop.name if prop else None
+
+    # Query order data points
+    order_rows = (
+        db.query(OrderItem, Order)
+        .join(Order, OrderItem.order_id == Order.id)
+        .filter(OrderItem.inventory_item_id == item_id)
+        .order_by(Order.created_at.asc())
+        .all()
+    )
+
+    order_points = []
+    for oi, order in order_rows:
+        # Pick best date: ordered_at > approved_at > submitted_at > created_at
+        best_date = order.ordered_at or order.approved_at or order.submitted_at or order.created_at
+        if best_date:
+            order_points.append(OrderDataPoint(
+                date=best_date.isoformat(),
+                requested_qty=oi.requested_quantity or 0,
+                approved_qty=oi.approved_quantity,
+                received_qty=oi.received_quantity,
+                order_number=order.order_number,
+                status=order.status,
+            ))
+
+    # Query inventory count data points
+    count_rows = (
+        db.query(InventoryCountItem, InventoryCount)
+        .join(InventoryCount, InventoryCountItem.inventory_count_id == InventoryCount.id)
+        .filter(
+            InventoryCountItem.inventory_item_id == item_id,
+            InventoryCount.is_finalized == True,
+        )
+        .order_by(InventoryCount.count_date.asc())
+        .all()
+    )
+
+    count_points = []
+    for ci, count in count_rows:
+        if count.count_date:
+            count_points.append(CountDataPoint(
+                date=count.count_date.isoformat(),
+                quantity=ci.quantity or 0,
+            ))
+
+    return ItemTrendsResponse(
+        item_id=inv_item.id,
+        item_name=inv_item.name,
+        property_name=property_name,
+        unit=inv_item.unit,
+        par_level=inv_item.par_level,
+        order_at=inv_item.order_at,
+        current_stock=inv_item.current_stock,
+        avg_weekly_usage=inv_item.avg_weekly_usage,
+        order_points=order_points,
+        count_points=count_points,
+    )

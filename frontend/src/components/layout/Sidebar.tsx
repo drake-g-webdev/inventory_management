@@ -15,6 +15,7 @@ import {
   CheckCircle,
   X,
   Layers,
+  TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -35,6 +36,7 @@ const navigation: NavItem[] = [
   { name: 'Master Products', href: '/admin/master-products', icon: Layers, roles: ['admin'] },
   { name: 'Receipts', href: '/admin/receipts', icon: Receipt, roles: ['admin'] },
   { name: 'Seed Inventory', href: '/admin/seed-inventory', icon: Package, roles: ['admin'] },
+  { name: 'Item Trends', href: '/admin/trends', icon: TrendingUp, roles: ['admin'] },
   // Camp Worker
   { name: 'Inventory', href: '/inventory', icon: Package, roles: ['camp_worker'] },
   { name: 'Orders', href: '/orders', icon: ClipboardList, roles: ['camp_worker'] },
