@@ -263,9 +263,7 @@ REMEMBER: It's better to mark a price as uncertain than to guess wrong. If you c
         else:
             media_type = "image/jpeg"  # Default to JPEG
 
-        response = client.chat.completions.create(
-            model="gpt-5.2",
-            messages=[
+        extraction_messages = [
                 {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
@@ -298,10 +296,23 @@ Return the data as JSON with the price_verified field for each item."""
                         }
                     ]
                 }
-            ],
-            max_completion_tokens=4096,
-            response_format={"type": "json_object"}
-        )
+            ]
+
+        try:
+            response = client.chat.completions.create(
+                model="gpt-5.2",
+                messages=extraction_messages,
+                max_completion_tokens=4096,
+                response_format={"type": "json_object"}
+            )
+        except Exception as e:
+            logger.warning(f"gpt-5.2 failed, falling back to gpt-4o: {e}")
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=extraction_messages,
+                max_completion_tokens=4096,
+                response_format={"type": "json_object"}
+            )
 
         # Parse the response
         result_text = response.choices[0].message.content
@@ -511,9 +522,7 @@ async def detect_supplier_from_image(image_content: bytes) -> Optional[str]:
         else:
             media_type = "image/jpeg"
 
-        response = client.chat.completions.create(
-            model="gpt-5.2",
-            messages=[
+        supplier_messages = [
                 {
                     "role": "system",
                     "content": """Look at the TOP of this receipt and identify the store/supplier name.
@@ -527,10 +536,23 @@ Examples: Costco, Walmart, Sysco, US Foods, Restaurant Depot, Charlie's Produce"
                         {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{image_base64}"}}
                     ]
                 }
-            ],
-            max_completion_tokens=100,
-            response_format={"type": "json_object"}
-        )
+            ]
+
+        try:
+            response = client.chat.completions.create(
+                model="gpt-5.2",
+                messages=supplier_messages,
+                max_completion_tokens=100,
+                response_format={"type": "json_object"}
+            )
+        except Exception as e:
+            logger.warning(f"gpt-5.2 failed for supplier detection, falling back to gpt-4o: {e}")
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=supplier_messages,
+                max_completion_tokens=100,
+                response_format={"type": "json_object"}
+            )
 
         result = json.loads(response.choices[0].message.content)
         return result.get("supplier_name")

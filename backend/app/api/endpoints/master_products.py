@@ -57,14 +57,21 @@ def list_master_products(
 
     products = query.order_by(MasterProduct.category, MasterProduct.name).offset(skip).limit(limit).all()
 
+    # Batch query: get assignment counts for all products in one query
+    product_ids = [p.id for p in products]
+    assignment_counts = {}
+    if product_ids:
+        counts = db.query(
+            InventoryItem.master_product_id,
+            func.count(InventoryItem.id)
+        ).filter(
+            InventoryItem.master_product_id.in_(product_ids)
+        ).group_by(InventoryItem.master_product_id).all()
+        assignment_counts = dict(counts)
+
     # Build response with supplier names and assignment counts
     result = []
     for product in products:
-        # Count properties using this product
-        assignment_count = db.query(InventoryItem).filter(
-            InventoryItem.master_product_id == product.id
-        ).count()
-
         product_data = MasterProductResponse(
             id=product.id,
             name=product.name,
@@ -87,7 +94,7 @@ def list_master_products(
             is_active=product.is_active,
             created_at=product.created_at,
             updated_at=product.updated_at,
-            assigned_property_count=assignment_count
+            assigned_property_count=assignment_counts.get(product.id, 0)
         )
         result.append(product_data)
 
