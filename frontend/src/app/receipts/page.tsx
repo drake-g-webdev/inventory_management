@@ -332,14 +332,16 @@ export default function ReceiptsPage() {
     const order = orders.find(o => o.id === receipt.order_id);
     const propertyId = order ? selectedPropertyId : null;
 
-    // For now, we'll need to use a property ID - let's try to get it from context
-    // Since the receipt is linked to an order, we should get property from the receipt data
-    // Actually, we need to find a way to get the property_id
+    const resolvedPropertyId = viewingReceipt.property_id || selectedPropertyId;
+    if (!resolvedPropertyId) {
+      toast.error('No property selected. Please select a camp first.');
+      return;
+    }
 
     try {
       await addToInventory.mutateAsync({
         name: addItemForm.name,
-        property_id: viewingReceipt.property_id || selectedPropertyId || 1, // fallback - should have property on receipt
+        property_id: resolvedPropertyId,
         supplier_id: addItemForm.supplier_id ? parseInt(addItemForm.supplier_id) : undefined,
         category: addItemForm.category || undefined,
         unit: addItemForm.unit,

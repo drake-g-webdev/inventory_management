@@ -153,6 +153,7 @@ export interface OrderItem {
   has_issue?: boolean;
   issue_description?: string | null;
   issue_photo_url?: string | null;
+  shortage_dismissed?: boolean;
   receiving_notes?: string | null;
 }
 

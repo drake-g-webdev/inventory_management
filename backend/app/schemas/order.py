@@ -47,6 +47,8 @@ class OrderItemResponse(OrderItemBase):
     is_received: bool
     has_issue: bool
     issue_description: Optional[str] = None
+    issue_photo_url: Optional[str] = None
+    shortage_dismissed: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
 
