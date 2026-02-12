@@ -231,20 +231,11 @@ def update_inventory_item(
     require_property_access(item.property_id, current_user)
 
     update_data = item_data.model_dump(exclude_unset=True)
-
-    # Track if is_recurring is being changed to True
-    becoming_recurring = (
-        "is_recurring" in update_data and
-        update_data["is_recurring"] is True and
-        not item.is_recurring
-    )
-
     for key, value in update_data.items():
         setattr(item, key, value)
 
-    # Auto-link to master product when item becomes recurring
-    if becoming_recurring:
-        _auto_link_to_master_product(item, db)
+    # Auto-link to master product if item is recurring and not yet linked
+    _auto_link_to_master_product(item, db)
 
     db.commit()
     db.refresh(item)
