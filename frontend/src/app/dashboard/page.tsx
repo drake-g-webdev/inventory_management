@@ -124,7 +124,10 @@ function CampWorkerDashboard() {
           <div className="space-y-2">
             {lowStock.slice(0, 5).map((item) => (
               <div key={item.id} className="flex justify-between items-center py-2 border-b border-yellow-200 last:border-0">
-                <span className="font-medium text-gray-900">{item.name}</span>
+                <span className="font-medium text-gray-900">
+                  {item.name}
+                  {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
+                </span>
                 <span className="text-yellow-700">
                   {item.current_stock} / {item.par_level} {item.unit}
                 </span>

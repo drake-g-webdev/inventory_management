@@ -434,7 +434,10 @@ export default function ReviewOrdersPage() {
                                               return (
                                                 <tr key={item.id} className={isModified ? 'bg-yellow-50' : ''}>
                                                   <td className="px-4 py-2">
-                                                    <span className="font-medium text-sm">{item.item_name || item.custom_item_name}</span>
+                                                    <span className="font-medium text-sm">
+                                                      {item.item_name || item.custom_item_name}
+                                                      {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
+                                                    </span>
                                                     {item.reviewer_notes && (
                                                       <p className="text-xs text-orange-600 mt-1">{item.reviewer_notes}</p>
                                                     )}
@@ -576,6 +579,7 @@ export default function ReviewOrdersPage() {
                       <div>
                         <p className={`font-medium ${inOrder ? 'text-gray-400' : 'text-gray-900'}`}>
                           {item.name}
+                          {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
                         </p>
                         <p className="text-sm text-gray-500">
                           {item.category} {item.supplier_name && `• ${item.supplier_name}`}

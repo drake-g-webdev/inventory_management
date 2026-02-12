@@ -143,6 +143,7 @@ export interface OrderItem {
   reviewer_notes: string | null;
   item_name?: string | null;
   category?: string | null;
+  qty?: string | null;
   supplier_id?: number | null;
   supplier_name?: string | null;
   par_level?: number | null;

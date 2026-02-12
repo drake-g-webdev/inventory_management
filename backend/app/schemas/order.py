@@ -58,6 +58,7 @@ class OrderItemResponse(OrderItemBase):
 class OrderItemWithDetails(OrderItemResponse):
     item_name: str
     category: Optional[str] = None
+    qty: Optional[str] = None
     supplier_name: Optional[str] = None
     par_level: Optional[float] = None
     current_stock: Optional[float] = None

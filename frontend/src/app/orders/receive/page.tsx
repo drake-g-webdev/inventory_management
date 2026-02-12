@@ -317,6 +317,7 @@ export default function ReceiveOrdersPage() {
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-medium text-gray-900">
                                   {getItemName(item)}
+                                  {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
                                 </span>
                                 {isAlreadyReceived && (
                                   <span className="flex items-center text-green-600 text-xs">

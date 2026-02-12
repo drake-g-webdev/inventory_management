@@ -720,11 +720,13 @@ def _build_order_with_items(order: Order, db: Session) -> OrderWithItems:
         if item.inventory_item:
             item_detail.item_name = item.inventory_item.name
             item_detail.category = item.inventory_item.category
+            item_detail.qty = item.inventory_item.qty
             item_detail.par_level = item.inventory_item.par_level
             item_detail.current_stock = item.inventory_item.current_stock
         else:
             item_detail.item_name = item.custom_item_name or "Custom Item"
             item_detail.category = None
+            item_detail.qty = None
             item_detail.par_level = None
             item_detail.current_stock = None
 
@@ -1064,6 +1066,7 @@ def update_order_item(
     item_detail = OrderItemWithDetails.model_validate(item)
     if item.inventory_item:
         item_detail.item_name = item.inventory_item.name
+        item_detail.qty = item.inventory_item.qty
     else:
         item_detail.item_name = item.custom_item_name or "Custom Item"
     if item.supplier:
