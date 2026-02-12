@@ -25,7 +25,7 @@ from app.models.order import Order, OrderItem, OrderStatus, OrderItemFlag
 from app.models.supplier import Supplier
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderResponse, OrderWithItems,
-    OrderItemCreate, OrderItemUpdate, OrderItemWithDetails,
+    OrderItemCreate, OrderItemUpdate, OrderItemResponse, OrderItemWithDetails,
     OrderSubmitRequest, OrderReviewRequest, OrderReceiveRequest,
     AutoGenerateOrderRequest, OrderSummary, PropertyOrderSummary,
     SupplierPurchaseList, SupplierPurchaseGroup, SupplierPurchaseItem,
@@ -59,7 +59,7 @@ def _get_order_query_with_eager_loading(db: Session):
     Loads: items, inventory_item, supplier, created_by_user, reviewed_by_user, camp_property
     """
     return db.query(Order).options(
-        joinedload(Order.items).joinedload(OrderItem.inventory_item),
+        joinedload(Order.items).joinedload(OrderItem.inventory_item).joinedload(InventoryItem.supplier),
         joinedload(Order.items).joinedload(OrderItem.supplier),
         joinedload(Order.created_by_user),
         joinedload(Order.reviewed_by_user),
@@ -693,56 +693,64 @@ def _build_order_with_items(order: Order, db: Session) -> OrderWithItems:
     """Helper to build order response with items.
     Note: Expects order to be loaded with eager loading via _get_order_query_with_eager_loading()
     """
-    order_data = OrderWithItems.model_validate(order)
+    # Validate base order fields only (without items) to avoid model_validate
+    # picking up @property methods or failing on relationship traversal
+    base_data = OrderResponse.model_validate(order).model_dump()
 
     # Use eagerly loaded camp_property (falls back to query if not loaded)
     if order.camp_property:
-        order_data.property_name = order.camp_property.name
+        base_data["property_name"] = order.camp_property.name
     else:
         prop = db.query(Property).filter(Property.id == order.property_id).first()
-        order_data.property_name = prop.name if prop else None
+        base_data["property_name"] = prop.name if prop else None
 
     # Get user names from eagerly loaded relationships
+    base_data["created_by_name"] = None
     if order.created_by_user:
-        order_data.created_by_name = order.created_by_user.full_name or order.created_by_user.email
+        base_data["created_by_name"] = order.created_by_user.full_name or order.created_by_user.email
+    base_data["reviewed_by_name"] = None
     if order.reviewed_by_user:
-        order_data.reviewed_by_name = order.reviewed_by_user.full_name or order.reviewed_by_user.email
+        base_data["reviewed_by_name"] = order.reviewed_by_user.full_name or order.reviewed_by_user.email
 
     # Build items with details and calculate totals
-    order_data.items = []
+    items = []
     total_requested = 0.0
     total_approved = 0.0
 
     for item in order.items:
-        item_detail = OrderItemWithDetails.model_validate(item)
+        # Build base item data without computed fields
+        item_data = OrderItemResponse.model_validate(item).model_dump()
 
         # Get item name, category, and inventory data
         if item.inventory_item:
-            item_detail.item_name = item.inventory_item.name
-            item_detail.category = item.inventory_item.category
-            item_detail.qty = item.inventory_item.qty
-            item_detail.par_level = item.inventory_item.par_level
-            item_detail.order_at = item.inventory_item.order_at
-            item_detail.current_stock = item.inventory_item.current_stock
+            item_data["item_name"] = item.inventory_item.name
+            item_data["category"] = item.inventory_item.category
+            item_data["qty"] = item.inventory_item.qty
+            item_data["par_level"] = item.inventory_item.par_level
+            item_data["order_at"] = item.inventory_item.order_at
+            item_data["current_stock"] = item.inventory_item.current_stock
         else:
-            item_detail.item_name = item.custom_item_name or "Custom Item"
-            item_detail.category = None
-            item_detail.qty = None
-            item_detail.par_level = None
-            item_detail.order_at = None
-            item_detail.current_stock = None
+            item_data["item_name"] = item.custom_item_name or "Custom Item"
+            item_data["category"] = None
+            item_data["qty"] = None
+            item_data["par_level"] = None
+            item_data["order_at"] = None
+            item_data["current_stock"] = None
 
         # Get supplier name and ID - try from order item first, then from inventory item
         if item.supplier_id and item.supplier:
-            item_detail.supplier_id = item.supplier_id
-            item_detail.supplier_name = item.supplier.name
+            item_data["supplier_id"] = item.supplier_id
+            item_data["supplier_name"] = item.supplier.name
         elif item.inventory_item and item.inventory_item.supplier_id and item.inventory_item.supplier:
-            item_detail.supplier_id = item.inventory_item.supplier_id
-            item_detail.supplier_name = item.inventory_item.supplier.name
+            item_data["supplier_id"] = item.inventory_item.supplier_id
+            item_data["supplier_name"] = item.inventory_item.supplier.name
+        else:
+            item_data["supplier_name"] = None
 
         # Calculate quantities
-        item_detail.final_quantity = item.approved_quantity if item.approved_quantity is not None else item.requested_quantity
-        item_detail.line_total = item_detail.final_quantity * (item.unit_price or 0)
+        final_qty = item.approved_quantity if item.approved_quantity is not None else item.requested_quantity
+        item_data["final_quantity"] = final_qty
+        item_data["line_total"] = final_qty * (item.unit_price or 0)
 
         # Calculate totals for requested and approved values
         unit_price = item.unit_price or 0
@@ -752,13 +760,13 @@ def _build_order_with_items(order: Order, db: Session) -> OrderWithItems:
         else:
             total_approved += item.requested_quantity * unit_price
 
-        order_data.items.append(item_detail)
+        items.append(OrderItemWithDetails(**item_data))
 
-    # Set the totals
-    order_data.total_requested_value = total_requested
-    order_data.total_approved_value = total_approved
+    base_data["items"] = items
+    base_data["total_requested_value"] = total_requested
+    base_data["total_approved_value"] = total_approved
 
-    return order_data
+    return OrderWithItems(**base_data)
 
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
