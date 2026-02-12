@@ -61,6 +61,7 @@ class OrderItemWithDetails(OrderItemResponse):
     qty: Optional[str] = None
     supplier_name: Optional[str] = None
     par_level: Optional[float] = None
+    order_at: Optional[float] = None
     current_stock: Optional[float] = None
     final_quantity: float
     line_total: float

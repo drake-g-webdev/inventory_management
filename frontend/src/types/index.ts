@@ -147,6 +147,7 @@ export interface OrderItem {
   supplier_id?: number | null;
   supplier_name?: string | null;
   par_level?: number | null;
+  order_at?: number | null;
   current_stock?: number | null;
   final_quantity?: number;
   line_total?: number;

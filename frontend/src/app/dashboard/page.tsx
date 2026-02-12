@@ -129,7 +129,7 @@ function CampWorkerDashboard() {
                   {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
                 </span>
                 <span className="text-yellow-700">
-                  {item.current_stock} / {item.par_level} {item.unit}
+                  {item.current_stock}{item.order_at != null ? ` (order at ${item.order_at})` : ''} / {item.par_level} {item.unit}
                 </span>
               </div>
             ))}

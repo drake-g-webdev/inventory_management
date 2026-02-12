@@ -407,6 +407,7 @@ export default function ReviewOrdersPage() {
                                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase" style={{ width: '180px' }}>Supplier</th>
                                           <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ width: '80px' }}>Par</th>
+                                          <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ width: '80px' }}>Order At</th>
                                           <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ width: '80px' }}>Current</th>
                                           <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ width: '100px' }}>Requested</th>
                                           <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase" style={{ width: '120px' }}>Approved</th>
@@ -416,7 +417,7 @@ export default function ReviewOrdersPage() {
                                         {group.categories.map((category) => (
                                           <React.Fragment key={category.categoryName}>
                                             <tr className="bg-gray-700">
-                                              <td colSpan={6} className="px-4 py-2 text-sm font-semibold text-white">
+                                              <td colSpan={7} className="px-4 py-2 text-sm font-semibold text-white">
                                                 {category.categoryName}
                                               </td>
                                             </tr>
@@ -424,9 +425,10 @@ export default function ReviewOrdersPage() {
                                               const approvedQty = getApprovedQty(item);
                                               const isModified = approvedQty !== item.requested_quantity;
                                               const isSaving = savingItems.has(item.id);
+                                              const orderThreshold = item.order_at ?? item.par_level;
                                               const isLowStock = item.current_stock != null &&
-                                                item.par_level != null &&
-                                                item.current_stock < item.par_level;
+                                                orderThreshold != null &&
+                                                item.current_stock <= orderThreshold;
                                               const currentSupplierId = editedSuppliers[item.id] !== undefined
                                                 ? editedSuppliers[item.id]
                                                 : item.supplier_id;
@@ -459,6 +461,9 @@ export default function ReviewOrdersPage() {
                                                   </td>
                                                   <td className="px-4 py-2 text-center text-sm text-gray-600">
                                                     {item.par_level ?? '-'}
+                                                  </td>
+                                                  <td className="px-4 py-2 text-center text-sm text-gray-600">
+                                                    {item.order_at ?? '-'}
                                                   </td>
                                                   <td className={`px-4 py-2 text-center text-sm ${isLowStock ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
                                                     {item.current_stock ?? '-'}

@@ -722,12 +722,14 @@ def _build_order_with_items(order: Order, db: Session) -> OrderWithItems:
             item_detail.category = item.inventory_item.category
             item_detail.qty = item.inventory_item.qty
             item_detail.par_level = item.inventory_item.par_level
+            item_detail.order_at = item.inventory_item.order_at
             item_detail.current_stock = item.inventory_item.current_stock
         else:
             item_detail.item_name = item.custom_item_name or "Custom Item"
             item_detail.category = None
             item_detail.qty = None
             item_detail.par_level = None
+            item_detail.order_at = None
             item_detail.current_stock = None
 
         # Get supplier name and ID - try from order item first, then from inventory item
