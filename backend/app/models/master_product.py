@@ -41,6 +41,7 @@ class MasterProduct(Base):
 
     # Default par level suggestion
     default_par_level = Column(Float, nullable=True)
+    default_order_at = Column(Float, nullable=True)  # Default threshold to trigger reorder
 
     # Status
     is_active = Column(Boolean, default=True)

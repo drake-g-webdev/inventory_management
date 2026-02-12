@@ -59,7 +59,8 @@ class InventoryItem(Base):
     unit_price = Column(Float, nullable=True)  # Price per unit (case, gallon, etc.)
 
     # Par level - when to reorder
-    par_level = Column(Float, nullable=True)  # Minimum stock level before flagging for reorder
+    par_level = Column(Float, nullable=True)  # Target stock level to order back up to
+    order_at = Column(Float, nullable=True)  # Threshold at which to trigger reorder
 
     # Current stock (updated after inventory counts)
     current_stock = Column(Float, default=0.0)
@@ -89,19 +90,30 @@ class InventoryItem(Base):
     receipt_aliases = relationship("ReceiptCodeAlias", back_populates="inventory_item", cascade="all, delete-orphan")
 
     def is_low_stock(self) -> bool:
-        """Check if item is below par level"""
-        if self.par_level is None:
+        """Check if item is at or below order-at threshold"""
+        threshold = self.order_at if self.order_at is not None else self.par_level
+        if threshold is None:
             return False
-        return (self.current_stock or 0) < self.par_level
+        return (self.current_stock or 0) <= threshold
 
     def suggested_order_qty(self) -> float:
         """
         Suggest order quantity in ORDER UNITS based on usage and par level.
+        Only suggests ordering when stock is at or below order_at threshold.
+        Orders enough to bring stock back up to par_level.
         Returns quantity in order units (e.g., cases), rounded up to whole units.
         """
-        # Calculate needed quantity in inventory units
+        # Determine the trigger threshold (order_at, falling back to par_level)
+        threshold = self.order_at if self.order_at is not None else self.par_level
+
+        # Only suggest ordering if we're at or below the threshold
+        if threshold is None:
+            return 0
+        if (self.current_stock or 0) > threshold:
+            return 0
+
+        # Calculate needed quantity in inventory units (target is par_level)
         if self.avg_weekly_usage and self.par_level:
-            # Order enough for 1 week plus buffer to par level
             needed_inventory_units = self.par_level - (self.current_stock or 0) + self.avg_weekly_usage
         elif self.par_level:
             needed_inventory_units = self.par_level - (self.current_stock or 0)
@@ -116,7 +128,6 @@ class InventoryItem(Base):
         # Convert to order units if conversion is set
         units_per_order = self.units_per_order_unit or 1.0
         if units_per_order > 0:
-            # Calculate order units needed, rounded up to whole order units
             import math
             order_qty = math.ceil(needed_inventory_units / units_per_order)
             return order_qty

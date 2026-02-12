@@ -83,6 +83,32 @@ def add_missing_columns():
         except Exception as e:
             print(f"Note: Could not check/add qty column to inventory_items: {e}")
 
+        # Check and add default_order_at column to master_products
+        try:
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'master_products' AND column_name = 'default_order_at'
+            """))
+            if not result.fetchone():
+                conn.execute(text("ALTER TABLE master_products ADD COLUMN default_order_at FLOAT"))
+                conn.commit()
+                print("Added default_order_at column to master_products table")
+        except Exception as e:
+            print(f"Note: Could not check/add default_order_at column: {e}")
+
+        # Check and add order_at column to inventory_items
+        try:
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'inventory_items' AND column_name = 'order_at'
+            """))
+            if not result.fetchone():
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN order_at FLOAT"))
+                conn.commit()
+                print("Added order_at column to inventory_items table")
+        except Exception as e:
+            print(f"Note: Could not check/add order_at column: {e}")
+
 try:
     add_missing_columns()
 except Exception as e:

@@ -25,6 +25,7 @@ interface OrderLineItem {
   name: string;
   suggested_qty: number;
   par_level: number | null;
+  order_at: number | null;
   current_stock: number | null;
   inventory_unit: string | null;  // The unit used for counting
 }
@@ -77,6 +78,7 @@ export default function NewOrderPage() {
         name: item.name,
         suggested_qty: Math.ceil(item.suggested_order_qty),
         par_level: item.par_level,
+        order_at: item.order_at,
         current_stock: item.current_stock,
         inventory_unit: item.unit,  // Keep track of counting unit
       }));
@@ -100,6 +102,7 @@ export default function NewOrderPage() {
         name: customItemName,
         suggested_qty: 0,
         par_level: null,
+        order_at: null,
         current_stock: null,
         inventory_unit: null,
       }]);
@@ -125,6 +128,7 @@ export default function NewOrderPage() {
         name: invItem.name,
         suggested_qty: Math.ceil(invItem.suggested_order_qty),
         par_level: invItem.par_level,
+        order_at: invItem.order_at,
         current_stock: invItem.current_stock,
         inventory_unit: invItem.unit,  // Keep track of counting unit
       }]);
@@ -184,6 +188,7 @@ export default function NewOrderPage() {
       name: unreceived.item_name,
       suggested_qty: Math.ceil(unreceived.total_shortage),
       par_level: invItem?.par_level || null,
+      order_at: invItem?.order_at || null,
       current_stock: invItem?.current_stock || null,
       inventory_unit: invItem?.unit || null,
     }]);
@@ -220,6 +225,7 @@ export default function NewOrderPage() {
         name: unreceived.item_name,
         suggested_qty: Math.ceil(unreceived.total_shortage),
         par_level: invItem?.par_level || null,
+        order_at: invItem?.order_at || null,
         current_stock: invItem?.current_stock || null,
         inventory_unit: invItem?.unit || null,
       }]);
@@ -467,8 +473,11 @@ export default function NewOrderPage() {
                             {item.par_level !== null && (
                               <span>Par: {item.par_level}</span>
                             )}
+                            {item.order_at !== null && (
+                              <span>Order At: {item.order_at}</span>
+                            )}
                             {item.current_stock !== null && (
-                              <span className={item.par_level !== null && item.current_stock < item.par_level ? 'text-yellow-600 font-medium' : ''}>
+                              <span className={(() => { const t = item.order_at ?? item.par_level; return t !== null && item.current_stock <= t ? 'text-yellow-600 font-medium' : ''; })()}>
                                 Stock: {item.current_stock}
                               </span>
                             )}
@@ -501,6 +510,7 @@ export default function NewOrderPage() {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flag</th>
                           <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Par</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Order At</th>
                           <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Current</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Order Qty</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
@@ -540,7 +550,13 @@ export default function NewOrderPage() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-center text-sm text-gray-600">
-                              <span className={item.current_stock !== null && item.par_level !== null && item.current_stock < item.par_level ? 'text-yellow-600 font-medium' : ''}>
+                              {item.order_at ?? '-'}
+                              {item.order_at !== null && item.inventory_unit && (
+                                <span className="text-xs text-gray-400 ml-1">{item.inventory_unit}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center text-sm text-gray-600">
+                              <span className={(() => { const t = item.order_at ?? item.par_level; return item.current_stock !== null && t !== null && item.current_stock <= t ? 'text-yellow-600 font-medium' : ''; })()}>
                                 {item.current_stock ?? '-'}
                               </span>
                               {item.current_stock !== null && item.inventory_unit && (
@@ -634,6 +650,7 @@ export default function NewOrderPage() {
                                 name: item.name,
                                 suggested_qty: Math.ceil(item.suggested_order_qty),
                                 par_level: item.par_level,
+                                order_at: item.order_at,
                                 current_stock: item.current_stock,
                                 inventory_unit: item.unit,  // Keep track of counting unit
                               }]);

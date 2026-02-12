@@ -96,6 +96,7 @@ export default function InventoryPage() {
     product_notes: '',
     supplier_id: null,
     par_level: null,
+    order_at: null,
     current_stock: 0,
     unit_price: null,
     is_recurring: true,
@@ -169,6 +170,7 @@ export default function InventoryPage() {
         order_unit: item.order_unit,
         units_per_order_unit: item.units_per_order_unit,
         par_level: item.par_level,
+        order_at: item.order_at,
         current_stock: item.current_stock,
         unit_price: item.unit_price,
         is_recurring: item.is_recurring ?? true,
@@ -188,6 +190,7 @@ export default function InventoryPage() {
         product_notes: '',
         supplier_id: null,
         par_level: null,
+        order_at: null,
         current_stock: 0,
         unit_price: null,
         is_recurring: true,
@@ -214,6 +217,7 @@ export default function InventoryPage() {
       product_notes: '',
       supplier_id: null,
       par_level: null,
+      order_at: null,
       current_stock: 0,
       unit_price: null,
       is_recurring: true,
@@ -254,7 +258,7 @@ export default function InventoryPage() {
     }
   };
 
-  const handleInlineUpdate = async (id: number, field: 'current_stock' | 'par_level', value: string) => {
+  const handleInlineUpdate = async (id: number, field: 'current_stock' | 'par_level' | 'order_at', value: string) => {
     const numValue = value === '' ? null : parseFloat(value);
     try {
       await updateItem.mutateAsync({ id, data: { [field]: numValue } });
@@ -414,7 +418,7 @@ export default function InventoryPage() {
       const today = new Date().toLocaleDateString();
 
       // Group items by category first
-      type ItemWithMeta = { id: number; name: string; category: string | null; subcategory: string | null; unit: string; qty: string | null; par_level: number | null; current_stock: number; sort_order: number; categoryName: string; subcategoryName: string | null };
+      type ItemWithMeta = { id: number; name: string; category: string | null; subcategory: string | null; unit: string; qty: string | null; par_level: number | null; order_at: number | null; current_stock: number; sort_order: number; categoryName: string; subcategoryName: string | null };
       type RowData = { type: 'category' | 'subcategory' | 'item'; content: string; item?: ItemWithMeta };
 
       // Build category groups with items - items are already sorted by sort_order from the backend
@@ -921,6 +925,7 @@ export default function InventoryPage() {
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stock</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Par Level</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order At</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
                                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -985,10 +990,33 @@ export default function InventoryPage() {
                                                 </div>
                                               </td>
                                               <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-1">
+                                                  <input
+                                                    type="number"
+                                                    step="0.5"
+                                                    defaultValue={item.order_at ?? ''}
+                                                    placeholder="-"
+                                                    onBlur={(e) => {
+                                                      const newVal = e.target.value === '' ? null : parseFloat(e.target.value);
+                                                      if (newVal !== item.order_at) {
+                                                        handleInlineUpdate(item.id, 'order_at', e.target.value);
+                                                      }
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === 'Enter') {
+                                                        (e.target as HTMLInputElement).blur();
+                                                      }
+                                                    }}
+                                                    className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-500"
+                                                  />
+                                                  <span className="text-xs text-gray-500">{item.unit}</span>
+                                                </div>
+                                              </td>
+                                              <td className="px-6 py-4 whitespace-nowrap">
                                                 {item.is_low_stock ? (
                                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                                                     <AlertTriangle className="h-3 w-3 mr-1" />
-                                                    Below Par
+                                                    Needs Order
                                                   </span>
                                                 ) : (
                                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -1024,6 +1052,7 @@ export default function InventoryPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stock</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Par Level</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order At</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -1091,10 +1120,33 @@ export default function InventoryPage() {
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="number"
+                                        step="0.5"
+                                        defaultValue={item.order_at ?? ''}
+                                        placeholder="-"
+                                        onBlur={(e) => {
+                                          const newVal = e.target.value === '' ? null : parseFloat(e.target.value);
+                                          if (newVal !== item.order_at) {
+                                            handleInlineUpdate(item.id, 'order_at', e.target.value);
+                                          }
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            (e.target as HTMLInputElement).blur();
+                                          }
+                                        }}
+                                        className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-500"
+                                      />
+                                      <span className="text-xs text-gray-500">{item.unit}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
                                     {item.is_low_stock ? (
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                                         <AlertTriangle className="h-3 w-3 mr-1" />
-                                        Below Par
+                                        Needs Order
                                       </span>
                                     ) : (
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -1294,11 +1346,21 @@ export default function InventoryPage() {
               />
               <Input
                 id="par_level"
-                label="Par Level"
+                label="Par Level (order up to)"
                 type="number"
                 value={formData.par_level?.toString() || ''}
                 onChange={(e) => setFormData({ ...formData, par_level: e.target.value ? parseFloat(e.target.value) : null })}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                id="order_at"
+                label="Order At (trigger at)"
+                type="number"
+                value={formData.order_at?.toString() || ''}
+                onChange={(e) => setFormData({ ...formData, order_at: e.target.value ? parseFloat(e.target.value) : null })}
+              />
+              <div />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>

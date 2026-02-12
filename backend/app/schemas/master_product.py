@@ -19,6 +19,7 @@ class MasterProductBase(BaseModel):
     units_per_order_unit: Optional[float] = 1.0
     unit_price: Optional[float] = None
     default_par_level: Optional[float] = None
+    default_order_at: Optional[float] = None
 
 
 class MasterProductCreate(MasterProductBase):
@@ -41,6 +42,7 @@ class MasterProductUpdate(BaseModel):
     units_per_order_unit: Optional[float] = None
     unit_price: Optional[float] = None
     default_par_level: Optional[float] = None
+    default_order_at: Optional[float] = None
     is_active: Optional[bool] = None
 
 
@@ -68,6 +70,7 @@ class PropertyAssignment(BaseModel):
     inventory_item_id: int
     current_stock: float
     par_level: Optional[float] = None
+    order_at: Optional[float] = None
     is_synced: bool = True  # Whether property item matches master
 
 
@@ -75,6 +78,7 @@ class AssignMasterProductRequest(BaseModel):
     """Request to assign a master product to properties"""
     property_ids: List[int]
     par_level: Optional[float] = None  # Optional par level to set for all
+    order_at: Optional[float] = None  # Optional order-at threshold to set for all
 
 
 class SyncFromMasterRequest(BaseModel):

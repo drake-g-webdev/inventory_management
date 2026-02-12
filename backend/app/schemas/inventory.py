@@ -19,6 +19,7 @@ class InventoryItemBase(BaseModel):
     units_per_order_unit: Optional[float] = None  # Conversion factor (e.g., 8 boxes per case)
     unit_price: Optional[float] = None
     par_level: Optional[float] = None
+    order_at: Optional[float] = None
     current_stock: float = 0.0  # Allow setting initial stock on creation
     sort_order: int = 0
     is_recurring: bool = True  # Whether item appears on inventory printout sheets
@@ -44,6 +45,7 @@ class InventoryItemUpdate(BaseModel):
     units_per_order_unit: Optional[float] = None
     unit_price: Optional[float] = None
     par_level: Optional[float] = None
+    order_at: Optional[float] = None
     current_stock: Optional[float] = None
     avg_weekly_usage: Optional[float] = None
     sort_order: Optional[int] = None

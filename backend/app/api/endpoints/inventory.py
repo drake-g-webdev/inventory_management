@@ -79,6 +79,7 @@ def list_inventory_items(
             "units_per_order_unit": item.units_per_order_unit,
             "unit_price": item.unit_price,
             "par_level": item.par_level,
+            "order_at": item.order_at,
             "sort_order": item.sort_order,
             "current_stock": item.current_stock or 0,
             "avg_weekly_usage": item.avg_weekly_usage,

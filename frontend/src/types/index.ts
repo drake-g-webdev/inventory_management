@@ -101,6 +101,7 @@ export interface InventoryItem {
   units_per_order_unit: number | null;  // Conversion factor (e.g., 8 boxes per case)
   effective_order_unit: string | null;  // Order unit or falls back to inventory unit
   par_level: number | null;
+  order_at: number | null;
   current_stock: number;
   avg_weekly_usage: number | null;
   unit_price: number | null;
@@ -364,6 +365,7 @@ export interface CreateInventoryItemPayload {
   order_unit?: string | null;
   units_per_order_unit?: number | null;
   par_level?: number | null;
+  order_at?: number | null;
   current_stock?: number;
   unit_price?: number | null;
   is_recurring?: boolean;
@@ -597,6 +599,7 @@ export interface MasterProduct {
   units_per_order_unit: number | null;
   unit_price: number | null;
   default_par_level: number | null;
+  default_order_at: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
@@ -610,6 +613,7 @@ export interface PropertyAssignment {
   inventory_item_id: number;
   current_stock: number;
   par_level: number | null;
+  order_at: number | null;
   is_synced: boolean;
 }
 
@@ -633,6 +637,7 @@ export interface CreateMasterProductPayload {
   units_per_order_unit?: number | null;
   unit_price?: number | null;
   default_par_level?: number | null;
+  default_order_at?: number | null;
 }
 
 export interface UpdateMasterProductPayload extends Partial<CreateMasterProductPayload> {
@@ -642,6 +647,7 @@ export interface UpdateMasterProductPayload extends Partial<CreateMasterProductP
 export interface AssignMasterProductRequest {
   property_ids: number[];
   par_level?: number | null;
+  order_at?: number | null;
 }
 
 export interface SyncFromMasterRequest {
