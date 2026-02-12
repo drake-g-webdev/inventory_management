@@ -365,6 +365,63 @@ def cleanup_non_recurring_master_products(
     }
 
 
+@router.delete("/cleanup-duplicate-assignments")
+def cleanup_duplicate_assignments(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Find and fix duplicate master product assignments within the same property.
+    When a property has two inventory items linked to the same master product,
+    keeps the one with stock (or the newer one) and unlinks the other.
+    """
+    # Find duplicates: same (property_id, master_product_id) appearing more than once
+    from sqlalchemy import and_
+    duplicates = db.query(
+        InventoryItem.property_id,
+        InventoryItem.master_product_id,
+        func.count(InventoryItem.id).label('cnt')
+    ).filter(
+        InventoryItem.master_product_id.isnot(None)
+    ).group_by(
+        InventoryItem.property_id,
+        InventoryItem.master_product_id
+    ).having(func.count(InventoryItem.id) > 1).all()
+
+    fixed = []
+    for prop_id, master_id, count in duplicates:
+        # Get all items for this combo, ordered: items with stock first, then by id desc (newest)
+        items = db.query(InventoryItem).filter(
+            InventoryItem.property_id == prop_id,
+            InventoryItem.master_product_id == master_id
+        ).order_by(
+            InventoryItem.current_stock.desc(),
+            InventoryItem.id.desc()
+        ).all()
+
+        # Keep the first one (has most stock or is newest), unlink the rest
+        keeper = items[0]
+        for dupe in items[1:]:
+            dupe.master_product_id = None
+            fixed.append({
+                "property_id": prop_id,
+                "master_product_id": master_id,
+                "kept_item_id": keeper.id,
+                "kept_item_name": keeper.name,
+                "kept_stock": keeper.current_stock,
+                "unlinked_item_id": dupe.id,
+                "unlinked_item_name": dupe.name,
+                "unlinked_stock": dupe.current_stock,
+            })
+
+    db.commit()
+
+    return {
+        "message": f"Fixed {len(fixed)} duplicate assignments across {len(duplicates)} property/product combos",
+        "fixed": fixed
+    }
+
+
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_master_product(
     product_id: int,
@@ -617,6 +674,15 @@ def seed_from_property(
         ).first()
 
         if existing_master:
+            # Check if this property already has an item linked to this master product
+            already_linked = db.query(InventoryItem).filter(
+                InventoryItem.property_id == request.property_id,
+                InventoryItem.master_product_id == existing_master.id
+            ).first()
+            if already_linked:
+                # Skip - would create a duplicate assignment
+                continue
+
             # Link to existing master product
             item.master_product_id = existing_master.id
             linked.append({
