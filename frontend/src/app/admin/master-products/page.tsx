@@ -31,6 +31,7 @@ import { UNITS, CATEGORIES } from '@/lib/constants';
 
 const SUBCATEGORIES: Record<string, string[]> = {
   'Beverages': ['BIB', 'Cans/Bottles', 'Dry', 'Concentrate'],
+  'Frozen': ['Meat', 'Bread', 'Desserts'],
 };
 
 function groupByCategory(items: MasterProduct[]) {
