@@ -16,6 +16,7 @@ import {
   useAssignMasterProduct,
   useUnassignMasterProduct,
   useSyncFromMaster,
+  useSyncAllFromMaster,
   useSeedFromProperty,
   useUploadMasterProductsCSV,
   useUnlinkedInventoryItems,
@@ -66,6 +67,7 @@ export default function MasterProductsPage() {
   const assignProduct = useAssignMasterProduct();
   const unassignProduct = useUnassignMasterProduct();
   const syncFromMaster = useSyncFromMaster();
+  const syncAllFromMaster = useSyncAllFromMaster();
   const seedFromProperty = useSeedFromProperty();
   const uploadCSV = useUploadMasterProductsCSV();
   const cleanupNonRecurring = useCleanupNonRecurring();
@@ -302,6 +304,17 @@ export default function MasterProductsPage() {
     }
   };
 
+  const handleSyncAll = async () => {
+    if (!confirm('This will sync ALL linked inventory items across all properties with their master product data. Continue?')) return;
+    try {
+      const result = await syncAllFromMaster.mutateAsync();
+      toast.success(result.message);
+      refetch();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Sync all failed');
+    }
+  };
+
   const handleCleanupNonRecurring = async () => {
     if (!confirm('This will delete master products that only have non-recurring items. Continue?')) return;
     try {
@@ -432,6 +445,14 @@ export default function MasterProductsPage() {
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 {cleanupNonRecurring.isPending ? 'Cleaning...' : 'Cleanup Non-Recurring'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleSyncAll}
+                disabled={syncAllFromMaster.isPending}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${syncAllFromMaster.isPending ? 'animate-spin' : ''}`} />
+                {syncAllFromMaster.isPending ? 'Syncing...' : 'Sync All to Camps'}
               </Button>
               <Button variant="outline" onClick={() => setShowSeedModal(true)}>
                 <Download className="h-4 w-4 mr-2" />

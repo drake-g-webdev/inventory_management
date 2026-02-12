@@ -432,6 +432,7 @@ def assign_to_properties(
             category=product.category,
             subcategory=product.subcategory,
             brand=product.brand,
+            qty=product.qty,
             product_notes=product.product_notes,
             supplier_id=product.supplier_id,
             unit=product.unit,
@@ -537,6 +538,45 @@ def sync_items_from_master(
         "message": f"Synced {len(synced)} items",
         "synced": synced,
         "errors": errors
+    }
+
+
+@router.post("/sync-all")
+def sync_all_from_master(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Sync ALL linked inventory items from their master products"""
+    sync_fields = ["name", "category", "subcategory", "brand", "qty", "product_notes",
+                   "supplier_id", "unit", "order_unit", "units_per_order_unit", "unit_price"]
+
+    linked_items = db.query(InventoryItem).filter(
+        InventoryItem.master_product_id.isnot(None),
+        InventoryItem.is_active == True
+    ).all()
+
+    synced_count = 0
+    errors = []
+
+    for item in linked_items:
+        master = item.master_product
+        if not master:
+            errors.append({"item_id": item.id, "error": "Master product not found"})
+            continue
+
+        for field in sync_fields:
+            if hasattr(master, field) and hasattr(item, field):
+                setattr(item, field, getattr(master, field))
+
+        synced_count += 1
+
+    db.commit()
+
+    return {
+        "message": f"Synced {synced_count} inventory items from master products",
+        "synced_count": synced_count,
+        "error_count": len(errors),
+        "errors": errors[:20]
     }
 
 

@@ -179,7 +179,10 @@ export default function InventoryViewPage() {
                                 {categoryItems.map((item) => (
                                   <tr key={item.id} className={item.is_low_stock ? 'bg-yellow-50' : ''}>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                      <span className="font-medium text-gray-900">{item.name}</span>
+                                      <span className="font-medium text-gray-900">
+                                        {item.name}
+                                        {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
+                                      </span>
                                       {!item.is_recurring && (
                                         <span className="ml-2 px-1.5 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">one-off</span>
                                       )}

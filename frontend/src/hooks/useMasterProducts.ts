@@ -122,6 +122,20 @@ export function useSyncFromMaster() {
   });
 }
 
+export function useSyncAllFromMaster() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/master-products/sync-all');
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['master-products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}
+
 export function useSeedFromProperty() {
   const queryClient = useQueryClient();
   return useMutation({
