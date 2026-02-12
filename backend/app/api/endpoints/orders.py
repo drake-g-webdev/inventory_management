@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional
 from datetime import datetime
 import uuid
@@ -56,11 +56,12 @@ def calculate_order_total(order: Order) -> float:
 def _get_order_query_with_eager_loading(db: Session):
     """
     Create a query with eager loading to prevent N+1 queries.
-    Loads: items, inventory_item, supplier, created_by_user, reviewed_by_user, camp_property
+    Uses selectinload for the items collection to avoid Cartesian product
+    from multiple joinedload paths through Order.items.
     """
     return db.query(Order).options(
-        joinedload(Order.items).joinedload(OrderItem.inventory_item).joinedload(InventoryItem.supplier),
-        joinedload(Order.items).joinedload(OrderItem.supplier),
+        selectinload(Order.items).joinedload(OrderItem.inventory_item).joinedload(InventoryItem.supplier),
+        selectinload(Order.items).joinedload(OrderItem.supplier),
         joinedload(Order.created_by_user),
         joinedload(Order.reviewed_by_user),
         joinedload(Order.camp_property)
@@ -298,6 +299,8 @@ def get_supplier_purchase_list(
 
 @router.get("/my-orders", response_model=List[OrderWithItems])
 def list_my_orders(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -308,7 +311,7 @@ def list_my_orders(
     # Use eager loading to prevent N+1 queries
     orders = _get_order_query_with_eager_loading(db).filter(
         Order.property_id == current_user.property_id
-    ).order_by(Order.created_at.desc()).all()
+    ).order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
 
     # Build full order data with items and related info
     result = []
