@@ -105,8 +105,6 @@ export default function MasterProductsPage() {
     order_unit: '',
     units_per_order_unit: null,
     unit_price: null,
-    default_par_level: null,
-    default_order_at: null,
   });
 
   // Get product details for assignment modal
@@ -175,8 +173,6 @@ export default function MasterProductsPage() {
         order_unit: product.order_unit || '',
         units_per_order_unit: product.units_per_order_unit,
         unit_price: product.unit_price,
-        default_par_level: product.default_par_level,
-        default_order_at: product.default_order_at,
       });
     } else {
       setEditingProduct(null);
@@ -195,8 +191,6 @@ export default function MasterProductsPage() {
         order_unit: '',
         units_per_order_unit: null,
         unit_price: null,
-        default_par_level: null,
-        default_order_at: null,
       });
     }
     setShowEditModal(true);
@@ -801,24 +795,6 @@ export default function MasterProductsPage() {
                 value={formData.unit_price || ''}
                 onChange={(e) => setFormData({ ...formData, unit_price: e.target.value ? parseFloat(e.target.value) : null })}
               />
-              <Input
-                id="default_par_level"
-                label="Default Par (order up to)"
-                type="number"
-                min="0"
-                step="0.5"
-                value={formData.default_par_level || ''}
-                onChange={(e) => setFormData({ ...formData, default_par_level: e.target.value ? parseFloat(e.target.value) : null })}
-              />
-              <Input
-                id="default_order_at"
-                label="Default Order At (trigger at)"
-                type="number"
-                min="0"
-                step="0.5"
-                value={formData.default_order_at || ''}
-                onChange={(e) => setFormData({ ...formData, default_order_at: e.target.value ? parseFloat(e.target.value) : null })}
-              />
             </div>
 
             <div className="flex justify-end gap-3 mt-6">
@@ -930,7 +906,7 @@ export default function MasterProductsPage() {
           <div className="space-y-4">
             <p className="text-sm text-gray-500">
               Upload a CSV file to create or update master products. Required column: <code>name</code>.
-              Optional columns: sku, category, subcategory, brand, product_notes, supplier_name, unit, order_unit, units_per_order_unit, unit_price, default_par_level, default_order_at
+              Optional columns: sku, category, subcategory, brand, product_notes, supplier_name, unit, order_unit, units_per_order_unit, unit_price
             </p>
 
             <input
@@ -991,7 +967,7 @@ export default function MasterProductsPage() {
                         <span className="font-medium">{assignment.property_name}</span>
                         <span className="ml-2 text-sm text-gray-400">({assignment.property_code})</span>
                         <div className="text-sm text-gray-500">
-                          Stock: {assignment.current_stock} | Par: {assignment.par_level || '-'} | Order At: {assignment.order_at || '-'}
+                          Stock: {assignment.current_stock}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

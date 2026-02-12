@@ -602,8 +602,6 @@ export interface MasterProduct {
   order_unit: string | null;
   units_per_order_unit: number | null;
   unit_price: number | null;
-  default_par_level: number | null;
-  default_order_at: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;
@@ -640,8 +638,6 @@ export interface CreateMasterProductPayload {
   order_unit?: string | null;
   units_per_order_unit?: number | null;
   unit_price?: number | null;
-  default_par_level?: number | null;
-  default_order_at?: number | null;
 }
 
 export interface UpdateMasterProductPayload extends Partial<CreateMasterProductPayload> {
@@ -650,8 +646,6 @@ export interface UpdateMasterProductPayload extends Partial<CreateMasterProductP
 
 export interface AssignMasterProductRequest {
   property_ids: number[];
-  par_level?: number | null;
-  order_at?: number | null;
 }
 
 export interface SyncFromMasterRequest {

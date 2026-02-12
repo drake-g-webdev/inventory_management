@@ -89,8 +89,6 @@ def list_master_products(
             order_unit=product.order_unit,
             units_per_order_unit=product.units_per_order_unit,
             unit_price=product.unit_price,
-            default_par_level=product.default_par_level,
-            default_order_at=product.default_order_at,
             is_active=product.is_active,
             created_at=product.created_at,
             updated_at=product.updated_at,
@@ -201,7 +199,6 @@ def get_master_product(
         order_unit=product.order_unit,
         units_per_order_unit=product.units_per_order_unit,
         unit_price=product.unit_price,
-        default_par_level=product.default_par_level,
         is_active=product.is_active,
         created_at=product.created_at,
         updated_at=product.updated_at,
@@ -245,7 +242,6 @@ def create_master_product(
         order_unit=product.order_unit,
         units_per_order_unit=product.units_per_order_unit,
         unit_price=product.unit_price,
-        default_par_level=product.default_par_level,
         is_active=product.is_active,
         created_at=product.created_at,
         updated_at=product.updated_at,
@@ -304,7 +300,6 @@ def update_master_product(
         order_unit=product.order_unit,
         units_per_order_unit=product.units_per_order_unit,
         unit_price=product.unit_price,
-        default_par_level=product.default_par_level,
         is_active=product.is_active,
         created_at=product.created_at,
         updated_at=product.updated_at,
@@ -446,8 +441,6 @@ def assign_to_properties(
             order_unit=product.order_unit,
             units_per_order_unit=product.units_per_order_unit,
             unit_price=product.unit_price,
-            par_level=request.par_level or product.default_par_level,
-            order_at=request.order_at or product.default_order_at,
             current_stock=0,
             is_recurring=True,
             is_active=True
@@ -646,8 +639,6 @@ def seed_from_property(
                 order_unit=item.order_unit,
                 units_per_order_unit=item.units_per_order_unit,
                 unit_price=item.unit_price,
-                default_par_level=item.par_level,
-                default_order_at=item.order_at,
                 is_active=True
             )
             db.add(master)
@@ -739,16 +730,6 @@ async def upload_master_products_csv(
                 except ValueError:
                     pass
 
-                try:
-                    existing.default_par_level = float(row.get('default_par_level', '')) if row.get('default_par_level', '').strip() else existing.default_par_level
-                except ValueError:
-                    pass
-
-                try:
-                    existing.default_order_at = float(row.get('default_order_at', '')) if row.get('default_order_at', '').strip() else existing.default_order_at
-                except ValueError:
-                    pass
-
                 updated_count += 1
             else:
                 # Create new
@@ -761,18 +742,6 @@ async def upload_master_products_csv(
                 units_per_order = None
                 try:
                     units_per_order = float(row.get('units_per_order_unit', '')) if row.get('units_per_order_unit', '').strip() else None
-                except ValueError:
-                    pass
-
-                default_par = None
-                try:
-                    default_par = float(row.get('default_par_level', '')) if row.get('default_par_level', '').strip() else None
-                except ValueError:
-                    pass
-
-                default_order_at = None
-                try:
-                    default_order_at = float(row.get('default_order_at', '')) if row.get('default_order_at', '').strip() else None
                 except ValueError:
                     pass
 
@@ -789,8 +758,6 @@ async def upload_master_products_csv(
                     order_unit=row.get('order_unit', '').strip() or None,
                     units_per_order_unit=units_per_order,
                     unit_price=unit_price,
-                    default_par_level=default_par,
-                    default_order_at=default_order_at,
                     is_active=True
                 )
                 db.add(product)
