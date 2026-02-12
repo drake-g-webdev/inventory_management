@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_admin
 from app.models.user import User, UserRole
 from app.models.property import Property
+from app.models.inventory import InventoryItem
+from app.models.order import Order
 from app.schemas.property import PropertyCreate, PropertyUpdate, PropertyResponse, PropertyWithStats
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
@@ -48,9 +51,16 @@ def get_property(
             raise HTTPException(status_code=403, detail="Access denied to this property")
 
     response = PropertyWithStats.model_validate(prop)
-    response.user_count = len([u for u in prop.users if u.is_active])
-    response.inventory_item_count = len([i for i in prop.inventory_items if i.is_active])
-    response.pending_orders_count = len([o for o in prop.orders if o.status in ['draft', 'submitted', 'under_review', 'approved']])
+    response.user_count = db.query(func.count(User.id)).filter(
+        User.property_id == property_id, User.is_active == True
+    ).scalar() or 0
+    response.inventory_item_count = db.query(func.count(InventoryItem.id)).filter(
+        InventoryItem.property_id == property_id, InventoryItem.is_active == True
+    ).scalar() or 0
+    response.pending_orders_count = db.query(func.count(Order.id)).filter(
+        Order.property_id == property_id,
+        Order.status.in_(['draft', 'submitted', 'under_review', 'approved'])
+    ).scalar() or 0
 
     return response
 

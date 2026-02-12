@@ -1043,13 +1043,11 @@ def update_order_item(
     if not item:
         raise HTTPException(status_code=404, detail="Order item not found")
 
-    # Update the item - accept both field naming conventions from frontend
-    qty = item_data.quantity_approved or item_data.approved_quantity
-    if qty is not None:
-        item.approved_quantity = qty
-    notes = item_data.review_notes or item_data.reviewer_notes
-    if notes is not None:
-        item.reviewer_notes = notes
+    # Update the item
+    if item_data.approved_quantity is not None:
+        item.approved_quantity = item_data.approved_quantity
+    if item_data.reviewer_notes is not None:
+        item.reviewer_notes = item_data.reviewer_notes
     # Allow supervisor to update supplier for any item
     if item_data.supplier_id is not None:
         item.supplier_id = item_data.supplier_id

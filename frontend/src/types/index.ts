@@ -206,9 +206,9 @@ export interface InventoryCount {
   counted_by: number;
   counted_by_name?: string | null;
   notes: string | null;
-  is_complete: boolean;
-  photo_url: string | null;
-  ai_suggestions: any | null;
+  is_finalized: boolean;
+  source_image_url: string | null;
+  is_from_vision: boolean;
   created_at: string;
   updated_at: string | null;
   items: InventoryCountItem[];

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from app.models.order import OrderStatus, OrderItemFlag
@@ -21,20 +21,15 @@ class OrderItemCreate(OrderItemBase):
 
 
 class OrderItemUpdate(BaseModel):
-    # Accept both quantity_approved (from frontend) and approved_quantity
-    quantity_approved: Optional[float] = Field(default=None, alias="quantity_approved")
     approved_quantity: Optional[float] = None
     received_quantity: Optional[float] = None
     unit_price: Optional[float] = None
     reviewer_notes: Optional[str] = None
-    review_notes: Optional[str] = None  # Accept both field names from frontend
     receiving_notes: Optional[str] = None
     is_received: Optional[bool] = None
     has_issue: Optional[bool] = None
     issue_description: Optional[str] = None
     supplier_id: Optional[int] = None  # Allow changing supplier during review
-
-    model_config = ConfigDict(populate_by_name=True)
 
 
 class OrderItemResponse(OrderItemBase):

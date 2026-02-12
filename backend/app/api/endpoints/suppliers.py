@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_admin, require_supervisor_or_admin
 from app.models.user import User
 from app.models.supplier import Supplier
+from app.models.inventory import InventoryItem
+from app.models.order import OrderItem
 from app.schemas.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierWithStats
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
@@ -40,8 +43,12 @@ def get_supplier(
         raise HTTPException(status_code=404, detail="Supplier not found")
 
     response = SupplierWithStats.model_validate(supplier)
-    response.item_count = len(supplier.inventory_items) if supplier.inventory_items else 0
-    response.total_orders = len(supplier.order_items) if supplier.order_items else 0
+    response.item_count = db.query(func.count(InventoryItem.id)).filter(
+        InventoryItem.supplier_id == supplier_id
+    ).scalar() or 0
+    response.total_orders = db.query(func.count(OrderItem.id)).filter(
+        OrderItem.supplier_id == supplier_id
+    ).scalar() or 0
     response.total_spent = 0.0
 
     return response

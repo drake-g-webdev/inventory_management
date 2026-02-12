@@ -1714,7 +1714,7 @@ export default function InventoryPage() {
                         )}
                       </div>
                       <div className="flex items-center">
-                        {count.is_complete && (
+                        {count.is_finalized && (
                           <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
                         )}
                         <span className="text-primary-600 text-sm">View Details</span>
