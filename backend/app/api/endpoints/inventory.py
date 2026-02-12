@@ -16,6 +16,7 @@ from app.core.security import (
 from app.models.user import User, UserRole
 from app.models.property import Property
 from app.models.inventory import InventoryItem, InventoryCount, InventoryCountItem
+from app.models.master_product import MasterProduct
 from app.schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse, InventoryItemWithStatus,
     InventoryCountCreate, InventoryCountUpdate, InventoryCountResponse, InventoryCountWithItems,
@@ -23,6 +24,52 @@ from app.schemas.inventory import (
 )
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
+
+
+def _auto_link_to_master_product(item: InventoryItem, db: Session):
+    """
+    When an inventory item becomes recurring, automatically link it to a master product.
+    If a matching master product exists (by name), link to it.
+    Otherwise, create a new master product from the item's data.
+    """
+    if not item.is_recurring or item.master_product_id is not None:
+        return
+
+    # Check if a matching master product already exists (by name, case-insensitive)
+    existing_master = db.query(MasterProduct).filter(
+        MasterProduct.name.ilike(item.name),
+        MasterProduct.is_active == True
+    ).first()
+
+    if existing_master:
+        # Check for duplicate assignment (same property already linked to this master)
+        already_linked = db.query(InventoryItem).filter(
+            InventoryItem.property_id == item.property_id,
+            InventoryItem.master_product_id == existing_master.id,
+            InventoryItem.id != item.id
+        ).first()
+        if not already_linked:
+            item.master_product_id = existing_master.id
+    else:
+        # Create a new master product from this item's data
+        master = MasterProduct(
+            name=item.name,
+            category=item.category,
+            subcategory=item.subcategory,
+            description=item.description,
+            brand=item.brand,
+            qty=item.qty,
+            product_notes=item.product_notes,
+            supplier_id=item.supplier_id,
+            unit=item.unit,
+            order_unit=item.order_unit,
+            units_per_order_unit=item.units_per_order_unit,
+            unit_price=item.unit_price,
+            is_active=True
+        )
+        db.add(master)
+        db.flush()
+        item.master_product_id = master.id
 
 
 # ============== INVENTORY ITEMS ==============
@@ -158,6 +205,12 @@ def create_inventory_item(
 
     item = InventoryItem(**item_data.model_dump())
     db.add(item)
+    db.flush()
+
+    # Auto-link to master product if created as recurring
+    if item.is_recurring:
+        _auto_link_to_master_product(item, db)
+
     db.commit()
     db.refresh(item)
     return item
@@ -178,8 +231,20 @@ def update_inventory_item(
     require_property_access(item.property_id, current_user)
 
     update_data = item_data.model_dump(exclude_unset=True)
+
+    # Track if is_recurring is being changed to True
+    becoming_recurring = (
+        "is_recurring" in update_data and
+        update_data["is_recurring"] is True and
+        not item.is_recurring
+    )
+
     for key, value in update_data.items():
         setattr(item, key, value)
+
+    # Auto-link to master product when item becomes recurring
+    if becoming_recurring:
+        _auto_link_to_master_product(item, db)
 
     db.commit()
     db.refresh(item)
