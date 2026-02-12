@@ -1,15 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { Supplier } from '@/types';
-
-interface CreateSupplierPayload {
-  name: string;
-  contact_name?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  notes?: string;
-}
+import type { Supplier, CreateSupplierPayload } from '@/types';
 
 export function useSuppliers(search?: string) {
   return useQuery({

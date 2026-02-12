@@ -142,6 +142,12 @@ class FinancialDashboard(BaseModel):
 
 
 # Receipt Code Alias schemas - for mapping receipt codes to inventory items
+class ReceiptLineItemUpdate(BaseModel):
+    quantity: Optional[float] = None
+    unit_price: Optional[float] = None
+    total_price: Optional[float] = None
+
+
 class ReceiptCodeAliasCreate(BaseModel):
     inventory_item_id: int
     supplier_id: Optional[int] = None

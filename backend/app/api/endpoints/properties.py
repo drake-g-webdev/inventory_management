@@ -8,7 +8,7 @@ from app.core.security import get_current_user, require_admin
 from app.models.user import User, UserRole
 from app.models.property import Property
 from app.models.inventory import InventoryItem
-from app.models.order import Order
+from app.models.order import Order, OrderStatus
 from app.schemas.property import PropertyCreate, PropertyUpdate, PropertyResponse, PropertyWithStats
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
@@ -59,7 +59,7 @@ def get_property(
     ).scalar() or 0
     response.pending_orders_count = db.query(func.count(Order.id)).filter(
         Order.property_id == property_id,
-        Order.status.in_(['draft', 'submitted', 'under_review', 'approved'])
+        Order.status.in_([OrderStatus.DRAFT.value, OrderStatus.SUBMITTED.value, OrderStatus.UNDER_REVIEW.value, OrderStatus.APPROVED.value])
     ).scalar() or 0
 
     return response

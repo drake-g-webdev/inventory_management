@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.core.security import get_current_user, require_purchasing_team
 from app.models.user import User
 from app.models.receipt import Receipt
-from app.models.order import Order, OrderItem
+from app.models.order import Order, OrderItem, OrderStatus
 from app.models.property import Property
 from app.models.supplier import Supplier
 from app.models.inventory import InventoryItem, ReceiptCodeAlias
@@ -23,7 +23,7 @@ from app.schemas.receipt import (
     ReceiptLineItem, FinancialDashboard, SupplierSpendingSummary,
     PropertySpendingSummary, SpendingByPeriod, ReceiptExtractionResult,
     UnmatchedReceiptItem, AddUnmatchedToInventory, ReceiptCodeAliasCreate,
-    ReceiptCodeAliasResponse, MatchReceiptItemRequest
+    ReceiptCodeAliasResponse, MatchReceiptItemRequest, ReceiptLineItemUpdate
 )
 from app.schemas.inventory import InventoryItemResponse
 
@@ -841,7 +841,7 @@ def list_orders_for_property(
     """List orders for a property (for receipt upload - shows ordered/received orders)"""
     orders = db.query(Order).filter(
         Order.property_id == property_id,
-        Order.status.in_(["ordered", "partially_received", "received"])
+        Order.status.in_([OrderStatus.ORDERED.value, OrderStatus.PARTIALLY_RECEIVED.value, OrderStatus.RECEIVED.value])
     ).order_by(Order.created_at.desc()).limit(50).all()
 
     return [{
@@ -998,7 +998,7 @@ def get_financial_dashboard(
 
     # Pending orders total
     pending_orders = db.query(Order).filter(
-        Order.status.in_(['submitted', 'under_review', 'approved', 'ordered'])
+        Order.status.in_([OrderStatus.SUBMITTED.value, OrderStatus.UNDER_REVIEW.value, OrderStatus.APPROVED.value, OrderStatus.ORDERED.value])
     ).all()
     pending_total = sum(o.estimated_total or 0 for o in pending_orders)
 
@@ -1329,7 +1329,7 @@ def delete_receipt(
 def update_receipt_line_item(
     receipt_id: int,
     item_index: int,
-    item_data: dict,
+    item_data: ReceiptLineItemUpdate,
     current_user: User = Depends(require_purchasing_team),
     db: Session = Depends(get_db)
 ):
@@ -1346,12 +1346,12 @@ def update_receipt_line_item(
     old_total = line_item.get('total_price', 0) or 0
 
     # Update allowed fields
-    if 'quantity' in item_data and item_data['quantity'] is not None:
-        line_item['quantity'] = float(item_data['quantity'])
-    if 'unit_price' in item_data and item_data['unit_price'] is not None:
-        line_item['unit_price'] = float(item_data['unit_price'])
-    if 'total_price' in item_data and item_data['total_price'] is not None:
-        line_item['total_price'] = float(item_data['total_price'])
+    if item_data.quantity is not None:
+        line_item['quantity'] = float(item_data.quantity)
+    if item_data.unit_price is not None:
+        line_item['unit_price'] = float(item_data.unit_price)
+    if item_data.total_price is not None:
+        line_item['total_price'] = float(item_data.total_price)
 
     new_total = line_item.get('total_price', 0) or 0
 
