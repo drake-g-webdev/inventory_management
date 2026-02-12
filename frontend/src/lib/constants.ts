@@ -26,6 +26,23 @@ export const UNITS = [
 
 export type UnitType = typeof UNITS[number];
 
+// Standard inventory categories
+export const CATEGORIES = [
+  'Bakery',
+  'Beverages',
+  'Cleaning Supplies',
+  'Condiments',
+  'Dairy',
+  'Dry Goods',
+  'Frozen',
+  'Packaged Snacks',
+  'Paper & Plastic Goods',
+  'Produce',
+  'Protein',
+  'Spices',
+  'Other',
+] as const;
+
 // Default units for common categories and subcategories
 export const SUBCATEGORY_DEFAULT_UNITS: Record<string, string> = {
   // Categories

@@ -27,7 +27,7 @@ import { useProperties } from '@/hooks/useProperties';
 import { useSuppliers } from '@/hooks/useSuppliers';
 import type { MasterProduct, CreateMasterProductPayload, Property } from '@/types';
 import toast from 'react-hot-toast';
-import { UNITS } from '@/lib/constants';
+import { UNITS, CATEGORIES } from '@/lib/constants';
 
 const SUBCATEGORIES: Record<string, string[]> = {
   'Beverages': ['BIB', 'Cans/Bottles', 'Dry', 'Concentrate'],
@@ -682,16 +682,19 @@ export default function MasterProductsPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Input
-                id="category"
-                label="Category"
-                value={formData.category || ''}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value, subcategory: '' })}
-                list="categories"
-              />
-              <datalist id="categories">
-                {categories.map(cat => <option key={cat} value={cat} />)}
-              </datalist>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select
+                  value={formData.category || ''}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value, subcategory: '' })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Select Category</option>
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
 
               {formData.category && SUBCATEGORIES[formData.category] ? (
                 <div>
