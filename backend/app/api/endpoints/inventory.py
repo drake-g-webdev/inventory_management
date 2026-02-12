@@ -136,12 +136,13 @@ def get_inventory_item(
 
     require_property_access(item.property_id, current_user)
 
-    response = InventoryItemWithStatus.model_validate(item)
-    response.is_low_stock = item.is_low_stock()
-    response.suggested_order_qty = item.suggested_order_qty()
-    if item.supplier:
-        response.supplier_name = item.supplier.name
-    return response
+    # Build from base schema first to avoid Pydantic picking up model methods
+    item_data = InventoryItemResponse.model_validate(item).model_dump()
+    item_data["is_low_stock"] = item.is_low_stock()
+    item_data["suggested_order_qty"] = item.suggested_order_qty()
+    item_data["supplier_name"] = item.supplier.name if item.supplier else None
+    item_data["effective_order_unit"] = item.get_effective_order_unit()
+    return InventoryItemWithStatus(**item_data)
 
 
 @router.post("/items", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
@@ -237,9 +238,9 @@ def get_inventory_count(
 
     require_property_access(count.property_id, current_user)
 
-    response = InventoryCountWithItems.model_validate(count)
-    response.items = []
-
+    # Build from base schema to avoid validating items relationship directly
+    base_data = InventoryCountResponse.model_validate(count).model_dump()
+    items_detail = []
     for item in count.items:
         item_detail = InventoryCountItemWithDetails(
             id=item.id,
@@ -252,9 +253,9 @@ def get_inventory_count(
             item_category=item.inventory_item.category if item.inventory_item else None,
             item_unit=item.inventory_item.unit if item.inventory_item else "unit"
         )
-        response.items.append(item_detail)
+        items_detail.append(item_detail)
 
-    return response
+    return InventoryCountWithItems(**base_data, items=items_detail)
 
 
 @router.post("/counts", response_model=InventoryCountResponse, status_code=status.HTTP_201_CREATED)
