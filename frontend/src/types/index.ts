@@ -434,6 +434,7 @@ export interface SupplierPurchaseItem {
   item_name: string;
   category: string | null;
   brand: string | null;  // Preferred brand
+  qty: string | null;  // Product size e.g., "50#", "5 Gal"
   product_notes: string | null;  // Purchasing notes
   quantity: number;
   unit: string;

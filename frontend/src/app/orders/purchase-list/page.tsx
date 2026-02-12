@@ -85,7 +85,10 @@ function SupplierCard({ supplier, defaultExpanded = false, showPricing = true }:
                     <div className="flex items-start">
                       <Package className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
                       <div>
-                        <span className="font-medium text-gray-900">{item.item_name}</span>
+                        <span className="font-medium text-gray-900">
+                          {item.item_name}
+                          {item.qty && <span className="text-gray-500 ml-1">- {item.qty}</span>}
+                        </span>
                         {item.brand && (
                           <span className="ml-2 text-sm text-purple-600 font-medium">({item.brand})</span>
                         )}
@@ -309,7 +312,7 @@ export default function PurchaseListPage() {
                 ${groupedItems[category].map(item => `
                   <tr>
                     <td class="item-col">
-                      ${item.item_name}${item.brand ? ` <span class="brand">(${item.brand})</span>` : ''}
+                      ${item.item_name}${item.qty ? ` - ${item.qty}` : ''}${item.brand ? ` <span class="brand">(${item.brand})</span>` : ''}
                       ${item.product_notes ? `<div class="product-notes">${item.product_notes}</div>` : ''}
                     </td>
                     <td class="qty-col">${item.quantity}</td>

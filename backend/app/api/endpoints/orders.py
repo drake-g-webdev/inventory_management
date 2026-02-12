@@ -241,11 +241,13 @@ def get_supplier_purchase_list(
                 item_name = item.inventory_item.name
                 item_category = item.inventory_item.category
                 item_brand = item.inventory_item.brand
+                item_qty = item.inventory_item.qty
                 item_product_notes = item.inventory_item.product_notes
             else:
                 item_name = item.custom_item_name or "Custom Item"
                 item_category = None
                 item_brand = None
+                item_qty = None
                 item_product_notes = None
 
             # Calculate quantity and price
@@ -264,6 +266,7 @@ def get_supplier_purchase_list(
                 item_name=item_name,
                 category=item_category,
                 brand=item_brand,
+                qty=item_qty,
                 product_notes=item_product_notes,
                 quantity=quantity,
                 unit=item.unit or "",

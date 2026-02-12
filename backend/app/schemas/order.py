@@ -174,6 +174,7 @@ class SupplierPurchaseItem(BaseModel):
     item_name: str
     category: Optional[str] = None
     brand: Optional[str] = None  # Preferred brand
+    qty: Optional[str] = None  # Product size e.g., "50#", "5 Gal"
     product_notes: Optional[str] = None  # Purchasing notes
     quantity: float
     unit: str
