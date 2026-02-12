@@ -12,12 +12,12 @@ engine = create_engine(
     pool_pre_ping=True,     # Verify connections before use
 )
 
-# Set a statement timeout of 15s to kill long-running queries (PostgreSQL only)
+# Set a statement timeout of 30s to kill long-running queries (PostgreSQL only)
 if "postgresql" in settings.DATABASE_URL:
     @event.listens_for(engine, "connect")
     def set_statement_timeout(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
-        cursor.execute("SET statement_timeout = '15s'")
+        cursor.execute("SET statement_timeout = '30s'")
         cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

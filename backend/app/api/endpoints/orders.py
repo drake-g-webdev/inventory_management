@@ -85,21 +85,26 @@ def list_orders(
     elif current_user.role == UserRole.CAMP_WORKER.value:
         property_id = current_user.property_id
 
-    # Use eager loading to prevent N+1 queries
-    query = _get_order_query_with_eager_loading(db)
-    if property_id:
-        query = query.filter(Order.property_id == property_id)
-    if status:
-        query = query.filter(Order.status == status)
+    try:
+        # Use eager loading to prevent N+1 queries
+        query = _get_order_query_with_eager_loading(db)
+        if property_id:
+            query = query.filter(Order.property_id == property_id)
+        if status:
+            query = query.filter(Order.status == status)
 
-    orders = query.order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
+        orders = query.order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
 
-    # Build full order data with items and related info
-    result = []
-    for order in orders:
-        order_data = _build_order_with_items(order, db)
-        result.append(order_data)
-    return result
+        # Build full order data with items and related info
+        result = []
+        for order in orders:
+            order_data = _build_order_with_items(order, db)
+            result.append(order_data)
+        return result
+    except Exception as e:
+        logger.error(f"Error loading orders: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to load orders: {str(e)}")
 
 
 @router.get("/pending-review", response_model=List[OrderWithItems])
@@ -108,16 +113,20 @@ def list_pending_review_orders(
     db: Session = Depends(get_db)
 ):
     """List orders pending supervisor review"""
-    # Use eager loading to prevent N+1 queries
-    orders = _get_order_query_with_eager_loading(db).filter(
-        Order.status.in_([OrderStatus.SUBMITTED.value, OrderStatus.UNDER_REVIEW.value])
-    ).order_by(Order.submitted_at).all()
+    try:
+        orders = _get_order_query_with_eager_loading(db).filter(
+            Order.status.in_([OrderStatus.SUBMITTED.value, OrderStatus.UNDER_REVIEW.value])
+        ).order_by(Order.submitted_at).all()
 
-    result = []
-    for order in orders:
-        order_data = _build_order_with_items(order, db)
-        result.append(order_data)
-    return result
+        result = []
+        for order in orders:
+            order_data = _build_order_with_items(order, db)
+            result.append(order_data)
+        return result
+    except Exception as e:
+        logger.error(f"Error loading pending-review orders: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to load orders: {str(e)}")
 
 
 @router.get("/ready-to-order", response_model=List[OrderWithItems])
@@ -126,16 +135,20 @@ def list_ready_to_order(
     db: Session = Depends(get_db)
 ):
     """List approved orders ready for purchasing team"""
-    # Use eager loading to prevent N+1 queries
-    orders = _get_order_query_with_eager_loading(db).filter(
-        Order.status == OrderStatus.APPROVED.value
-    ).order_by(Order.approved_at).all()
+    try:
+        orders = _get_order_query_with_eager_loading(db).filter(
+            Order.status == OrderStatus.APPROVED.value
+        ).order_by(Order.approved_at).all()
 
-    result = []
-    for order in orders:
-        order_data = _build_order_with_items(order, db)
-        result.append(order_data)
-    return result
+        result = []
+        for order in orders:
+            order_data = _build_order_with_items(order, db)
+            result.append(order_data)
+        return result
+    except Exception as e:
+        logger.error(f"Error loading ready-to-order: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to load orders: {str(e)}")
 
 
 @router.get("/supplier-purchase-list", response_model=SupplierPurchaseList)
@@ -158,10 +171,10 @@ def get_supplier_purchase_list(
     ]
 
     # Build query with eager loading to prevent N+1 queries
-    # Loads: items, items.inventory_item, items.supplier, camp_property
+    # Uses selectinload for items collection to avoid Cartesian product
     base_query = db.query(Order).options(
-        joinedload(Order.items).joinedload(OrderItem.inventory_item),
-        joinedload(Order.items).joinedload(OrderItem.supplier),
+        selectinload(Order.items).joinedload(OrderItem.inventory_item),
+        selectinload(Order.items).joinedload(OrderItem.supplier),
         joinedload(Order.camp_property)
     )
 
@@ -300,7 +313,7 @@ def get_supplier_purchase_list(
 @router.get("/my-orders", response_model=List[OrderWithItems])
 def list_my_orders(
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -308,17 +321,22 @@ def list_my_orders(
     if not current_user.property_id:
         return []
 
-    # Use eager loading to prevent N+1 queries
-    orders = _get_order_query_with_eager_loading(db).filter(
-        Order.property_id == current_user.property_id
-    ).order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
+    try:
+        # Use eager loading to prevent N+1 queries
+        orders = _get_order_query_with_eager_loading(db).filter(
+            Order.property_id == current_user.property_id
+        ).order_by(Order.created_at.desc()).offset(skip).limit(limit).all()
 
-    # Build full order data with items and related info
-    result = []
-    for order in orders:
-        order_data = _build_order_with_items(order, db)
-        result.append(order_data)
-    return result
+        # Build full order data with items and related info
+        result = []
+        for order in orders:
+            order_data = _build_order_with_items(order, db)
+            result.append(order_data)
+        return result
+    except Exception as e:
+        logger.error(f"Error loading my-orders for user {current_user.id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to load orders: {str(e)}")
 
 
 # ============== FLAGGED ITEMS ==============

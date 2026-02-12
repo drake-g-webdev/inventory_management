@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List
 from datetime import datetime
 from app.models.order import OrderStatus, OrderItemFlag
@@ -14,6 +14,12 @@ class OrderItemBase(BaseModel):
     unit: Optional[str] = None
     unit_price: Optional[float] = None
     camp_notes: Optional[str] = None
+
+    @field_validator('flag', mode='before')
+    @classmethod
+    def coerce_none_flag(cls, v):
+        """Handle NULL flag values from database"""
+        return v if v is not None else OrderItemFlag.MANUAL.value
 
 
 class OrderItemCreate(OrderItemBase):
@@ -39,8 +45,8 @@ class OrderItemResponse(OrderItemBase):
     received_quantity: Optional[float] = None
     reviewer_notes: Optional[str] = None
     receiving_notes: Optional[str] = None
-    is_received: bool
-    has_issue: bool
+    is_received: bool = False
+    has_issue: bool = False
     issue_description: Optional[str] = None
     issue_photo_url: Optional[str] = None
     shortage_dismissed: bool = False
@@ -48,6 +54,12 @@ class OrderItemResponse(OrderItemBase):
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('is_received', 'has_issue', 'shortage_dismissed', mode='before')
+    @classmethod
+    def coerce_none_bools(cls, v):
+        """Handle NULL boolean values from database (pre-migration rows)"""
+        return v if v is not None else False
 
 
 class OrderItemWithDetails(OrderItemResponse):
@@ -92,7 +104,7 @@ class OrderResponse(BaseModel):
     approved_at: Optional[datetime] = None
     ordered_at: Optional[datetime] = None
     received_at: Optional[datetime] = None
-    estimated_total: float
+    estimated_total: float = 0.0
     actual_total: Optional[float] = None
     notes: Optional[str] = None
     created_at: datetime
@@ -100,6 +112,12 @@ class OrderResponse(BaseModel):
     item_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('estimated_total', mode='before')
+    @classmethod
+    def coerce_none_total(cls, v):
+        """Handle NULL estimated_total from database"""
+        return v if v is not None else 0.0
 
 
 class OrderWithItems(OrderResponse):
