@@ -193,3 +193,17 @@ export function useCleanupNonRecurring() {
     },
   });
 }
+
+export function useCleanupDuplicateAssignments() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.delete('/master-products/cleanup-duplicate-assignments');
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['master-products'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    },
+  });
+}

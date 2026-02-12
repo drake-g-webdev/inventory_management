@@ -20,7 +20,8 @@ import {
   useSeedFromProperty,
   useUploadMasterProductsCSV,
   useUnlinkedInventoryItems,
-  useCleanupNonRecurring
+  useCleanupNonRecurring,
+  useCleanupDuplicateAssignments
 } from '@/hooks/useMasterProducts';
 import { useProperties } from '@/hooks/useProperties';
 import { useSuppliers } from '@/hooks/useSuppliers';
@@ -71,6 +72,7 @@ export default function MasterProductsPage() {
   const seedFromProperty = useSeedFromProperty();
   const uploadCSV = useUploadMasterProductsCSV();
   const cleanupNonRecurring = useCleanupNonRecurring();
+  const cleanupDuplicates = useCleanupDuplicateAssignments();
 
   // Modal states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -320,6 +322,17 @@ export default function MasterProductsPage() {
     }
   };
 
+  const handleCleanupDuplicates = async () => {
+    if (!confirm('This will fix properties that have duplicate assignments to the same master product. Continue?')) return;
+    try {
+      const result = await cleanupDuplicates.mutateAsync();
+      toast.success(result.message);
+      refetch();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Cleanup failed');
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -439,6 +452,15 @@ export default function MasterProductsPage() {
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 {cleanupNonRecurring.isPending ? 'Cleaning...' : 'Cleanup Non-Recurring'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleCleanupDuplicates}
+                disabled={cleanupDuplicates.isPending}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {cleanupDuplicates.isPending ? 'Fixing...' : 'Fix Duplicates'}
               </Button>
               <Button
                 variant="outline"
