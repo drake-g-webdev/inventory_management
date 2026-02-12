@@ -472,7 +472,12 @@ export default function InventoryCountPage() {
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
                           {/* Item info */}
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 truncate">{item.name}</p>
+                            <p className="font-medium text-gray-900 truncate">
+                              {item.name}
+                              {item.brand && (
+                                <span className="ml-2 text-sm font-normal text-gray-500">({item.brand})</span>
+                              )}
+                            </p>
                             <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-1 text-sm text-gray-500">
                               <span>Unit: {item.unit}</span>
                               {item.par_level && (
