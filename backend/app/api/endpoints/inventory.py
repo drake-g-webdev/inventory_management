@@ -70,6 +70,8 @@ def list_inventory_items(
             "description": item.description,
             "category": item.category,
             "subcategory": item.subcategory,
+            "qty": item.qty,
+            "product_notes": item.product_notes,
             "brand": item.brand,
             "supplier_id": item.supplier_id,
             "unit": item.unit,
