@@ -30,6 +30,7 @@ export type UnitType = typeof UNITS[number];
 export const CATEGORIES = [
   'Bakery',
   'Beverages',
+  'Canned Goods',
   'Cleaning Supplies',
   'Condiments',
   'Dairy',
@@ -48,6 +49,7 @@ export const SUBCATEGORY_DEFAULT_UNITS: Record<string, string> = {
   // Categories
   'Produce': 'Lb',
   'Meat': 'Lb',
+  'Canned Goods': 'Can',
   'Dairy': 'Each',
   'Dry Goods': 'Each',
   'Beverages': 'Case',
