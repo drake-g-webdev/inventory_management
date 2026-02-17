@@ -107,6 +107,7 @@ export interface InventoryItem {
   unit_price: number | null;
   sort_order: number;
   is_active: boolean;
+  location: string | null;  // Storage location in camp
   seasonal_availability: string | null;  // midnight_sun, aurora, year_round
   is_recurring: boolean;
   is_low_stock: boolean;
@@ -372,6 +373,7 @@ export interface CreateInventoryItemPayload {
   order_at?: number | null;
   current_stock?: number;
   unit_price?: number | null;
+  location?: string | null;
   seasonal_availability?: string | null;
   is_recurring?: boolean;
 }

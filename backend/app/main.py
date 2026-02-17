@@ -86,6 +86,19 @@ def add_missing_columns():
         except Exception as e:
             print(f"Note: Could not check/add qty column to inventory_items: {e}")
 
+        # Check and add location column to inventory_items
+        try:
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'inventory_items' AND column_name = 'location'
+            """))
+            if not result.fetchone():
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN location VARCHAR(255)"))
+                conn.commit()
+                print("Added location column to inventory_items table")
+        except Exception as e:
+            print(f"Note: Could not check/add location column to inventory_items: {e}")
+
         # Check and add seasonal_availability column to inventory_items
         try:
             result = conn.execute(text("""

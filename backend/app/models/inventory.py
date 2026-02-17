@@ -72,6 +72,9 @@ class InventoryItem(Base):
     sort_order = Column(Integer, default=0)
     last_sorted_at = Column(DateTime(timezone=True), nullable=True)  # When item was last included in AI sort
 
+    # Storage location within the camp (e.g., "Walk-in Cooler", "Dry Storage")
+    location = Column(String(255), nullable=True)
+
     # Seasonal availability - per camp (midnight_sun, aurora, year_round)
     seasonal_availability = Column(String(50), nullable=True, default="year_round")
 

@@ -99,6 +99,7 @@ export default function InventoryPage() {
     order_at: null,
     current_stock: 0,
     unit_price: null,
+    location: '',
     seasonal_availability: 'year_round',
     is_recurring: true,
   });
@@ -174,6 +175,7 @@ export default function InventoryPage() {
         order_at: item.order_at,
         current_stock: item.current_stock,
         unit_price: item.unit_price,
+        location: item.location || '',
         seasonal_availability: item.seasonal_availability || 'year_round',
         is_recurring: item.is_recurring ?? true,
       });
@@ -195,6 +197,7 @@ export default function InventoryPage() {
         order_at: null,
         current_stock: 0,
         unit_price: null,
+        location: '',
         seasonal_availability: 'year_round',
         is_recurring: true,
       });
@@ -223,6 +226,7 @@ export default function InventoryPage() {
       order_at: null,
       current_stock: 0,
       unit_price: null,
+      location: '',
       seasonal_availability: 'year_round',
       is_recurring: true,
     });
@@ -1456,6 +1460,13 @@ export default function InventoryPage() {
                 </p>
               )}
             </div>
+            <Input
+              id="location"
+              label="Storage Location"
+              placeholder="e.g., Walk-in Cooler, Dry Storage, Freezer"
+              value={formData.location || ''}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value || null })}
+            />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Seasonal Availability</label>
               <select
