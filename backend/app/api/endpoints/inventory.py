@@ -133,6 +133,7 @@ def list_inventory_items(
             "current_stock": item.current_stock or 0,
             "avg_weekly_usage": item.avg_weekly_usage,
             "is_active": item.is_active,
+            "seasonal_availability": item.seasonal_availability or "year_round",
             "is_recurring": item.is_recurring if item.is_recurring is not None else True,
             "created_at": item.created_at,
             "updated_at": item.updated_at,

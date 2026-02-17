@@ -98,7 +98,7 @@ export default function MasterProductsPage() {
     sku: '',
     category: '',
     subcategory: '',
-    seasonal_availability: 'year_round',
+
     description: '',
     brand: '',
     qty: '',
@@ -166,7 +166,7 @@ export default function MasterProductsPage() {
         sku: product.sku || '',
         category: product.category || '',
         subcategory: product.subcategory || '',
-        seasonal_availability: product.seasonal_availability || 'year_round',
+
         description: product.description || '',
         brand: product.brand || '',
         qty: product.qty || '',
@@ -184,7 +184,7 @@ export default function MasterProductsPage() {
         sku: '',
         category: '',
         subcategory: '',
-        seasonal_availability: 'year_round',
+    
         description: '',
         brand: '',
         qty: '',
@@ -719,19 +719,6 @@ export default function MasterProductsPage() {
                   onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
                 />
               )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Seasonal Availability</label>
-              <select
-                value={formData.seasonal_availability || 'year_round'}
-                onChange={(e) => setFormData({ ...formData, seasonal_availability: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="year_round">Year Round</option>
-                <option value="midnight_sun">Midnight Sun (Summer)</option>
-                <option value="aurora">Aurora (Winter)</option>
-              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

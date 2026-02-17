@@ -22,6 +22,7 @@ class InventoryItemBase(BaseModel):
     order_at: Optional[float] = None
     current_stock: float = 0.0  # Allow setting initial stock on creation
     sort_order: int = 0
+    seasonal_availability: Optional[str] = "year_round"  # midnight_sun, aurora, year_round
     is_recurring: bool = True  # Whether item appears on inventory printout sheets
 
 
@@ -50,6 +51,7 @@ class InventoryItemUpdate(BaseModel):
     avg_weekly_usage: Optional[float] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
+    seasonal_availability: Optional[str] = None
     is_recurring: Optional[bool] = None
 
 
@@ -59,6 +61,7 @@ class InventoryItemResponse(InventoryItemBase):
     current_stock: float
     avg_weekly_usage: Optional[float] = None
     is_active: bool
+    seasonal_availability: Optional[str] = "year_round"
     is_recurring: bool = True
     created_at: datetime
     updated_at: Optional[datetime] = None

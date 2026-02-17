@@ -72,6 +72,9 @@ class InventoryItem(Base):
     sort_order = Column(Integer, default=0)
     last_sorted_at = Column(DateTime(timezone=True), nullable=True)  # When item was last included in AI sort
 
+    # Seasonal availability - per camp (midnight_sun, aurora, year_round)
+    seasonal_availability = Column(String(50), nullable=True, default="year_round")
+
     # Whether this item appears on recurring inventory printout sheets
     # One-off items are stored but won't appear on the printout
     is_recurring = Column(Boolean, default=True)

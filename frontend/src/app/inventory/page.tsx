@@ -99,6 +99,7 @@ export default function InventoryPage() {
     order_at: null,
     current_stock: 0,
     unit_price: null,
+    seasonal_availability: 'year_round',
     is_recurring: true,
   });
 
@@ -173,6 +174,7 @@ export default function InventoryPage() {
         order_at: item.order_at,
         current_stock: item.current_stock,
         unit_price: item.unit_price,
+        seasonal_availability: item.seasonal_availability || 'year_round',
         is_recurring: item.is_recurring ?? true,
       });
     } else {
@@ -193,6 +195,7 @@ export default function InventoryPage() {
         order_at: null,
         current_stock: 0,
         unit_price: null,
+        seasonal_availability: 'year_round',
         is_recurring: true,
       });
     }
@@ -220,6 +223,7 @@ export default function InventoryPage() {
       order_at: null,
       current_stock: 0,
       unit_price: null,
+      seasonal_availability: 'year_round',
       is_recurring: true,
     });
     setShowModal(true);
@@ -1451,6 +1455,18 @@ export default function InventoryPage() {
                   Example: 1 {formData.order_unit} = {formData.units_per_order_unit} {formData.unit}(s)
                 </p>
               )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Seasonal Availability</label>
+              <select
+                value={formData.seasonal_availability || 'year_round'}
+                onChange={(e) => setFormData({ ...formData, seasonal_availability: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="year_round">Year Round</option>
+                <option value="midnight_sun">Midnight Sun (Summer)</option>
+                <option value="aurora">Aurora (Winter)</option>
+              </select>
             </div>
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
               <label className="relative inline-flex items-center cursor-pointer">

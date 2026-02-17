@@ -107,6 +107,7 @@ export interface InventoryItem {
   unit_price: number | null;
   sort_order: number;
   is_active: boolean;
+  seasonal_availability: string | null;  // midnight_sun, aurora, year_round
   is_recurring: boolean;
   is_low_stock: boolean;
   suggested_order_qty: number;  // Now in order units
@@ -371,6 +372,7 @@ export interface CreateInventoryItemPayload {
   order_at?: number | null;
   current_stock?: number;
   unit_price?: number | null;
+  seasonal_availability?: string | null;
   is_recurring?: boolean;
 }
 
@@ -628,7 +630,6 @@ export interface CreateMasterProductPayload {
   sku?: string | null;
   category?: string | null;
   subcategory?: string | null;
-  seasonal_availability?: string | null;
   description?: string | null;
   brand?: string | null;
   qty?: string | null;
