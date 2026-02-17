@@ -86,6 +86,19 @@ def add_missing_columns():
         except Exception as e:
             print(f"Note: Could not check/add qty column to inventory_items: {e}")
 
+        # Check and add seasonal_availability column to inventory_items
+        try:
+            result = conn.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'inventory_items' AND column_name = 'seasonal_availability'
+            """))
+            if not result.fetchone():
+                conn.execute(text("ALTER TABLE inventory_items ADD COLUMN seasonal_availability VARCHAR(50) DEFAULT 'year_round'"))
+                conn.commit()
+                print("Added seasonal_availability column to inventory_items table")
+        except Exception as e:
+            print(f"Note: Could not check/add seasonal_availability column to inventory_items: {e}")
+
         # Check and add default_order_at column to master_products
         try:
             result = conn.execute(text("""
