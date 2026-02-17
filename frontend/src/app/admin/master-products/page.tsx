@@ -158,6 +158,9 @@ export default function MasterProductsPage() {
     setExpandedSubcategories(new Set());
   };
 
+  // Property IDs to assign when creating a new product
+  const [createPropertyIds, setCreatePropertyIds] = useState<number[]>([]);
+
   const handleOpenEditModal = (product?: MasterProduct) => {
     if (product) {
       setEditingProduct(product);
@@ -184,7 +187,7 @@ export default function MasterProductsPage() {
         sku: '',
         category: '',
         subcategory: '',
-    
+
         description: '',
         brand: '',
         qty: '',
@@ -196,6 +199,7 @@ export default function MasterProductsPage() {
         unit_price: null,
       });
     }
+    setCreatePropertyIds([]);
     setShowEditModal(true);
   };
 
@@ -217,8 +221,16 @@ export default function MasterProductsPage() {
         await updateProduct.mutateAsync({ id: editingProduct.id, data: payload });
         toast.success('Product updated successfully');
       } else {
-        await createProduct.mutateAsync(payload);
-        toast.success('Product created successfully');
+        const newProduct = await createProduct.mutateAsync(payload);
+        if (createPropertyIds.length > 0) {
+          await assignProduct.mutateAsync({
+            id: newProduct.id,
+            request: { property_ids: createPropertyIds }
+          });
+          toast.success(`Product created and assigned to ${createPropertyIds.length} camp${createPropertyIds.length > 1 ? 's' : ''}`);
+        } else {
+          toast.success('Product created successfully');
+        }
       }
       // Auto-expand the category
       if (formData.category) {
@@ -810,10 +822,43 @@ export default function MasterProductsPage() {
               />
             </div>
 
+            {!editingProduct && properties.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Assign to Camps</label>
+                <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
+                  {properties.map(prop => (
+                    <label key={prop.id} className="flex items-center px-4 py-2 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={createPropertyIds.includes(prop.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCreatePropertyIds([...createPropertyIds, prop.id]);
+                          } else {
+                            setCreatePropertyIds(createPropertyIds.filter(id => id !== prop.id));
+                          }
+                        }}
+                        className="h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+                      />
+                      <span className="ml-3 text-sm">
+                        <span className="font-medium">{prop.name}</span>
+                        <span className="ml-1 text-gray-400">({prop.code})</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {createPropertyIds.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {createPropertyIds.length} camp{createPropertyIds.length > 1 ? 's' : ''} selected
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="flex justify-end gap-3 mt-6">
               <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
-              <Button type="submit" isLoading={createProduct.isPending || updateProduct.isPending}>
-                {editingProduct ? 'Update' : 'Create'}
+              <Button type="submit" isLoading={createProduct.isPending || updateProduct.isPending || assignProduct.isPending}>
+                {editingProduct ? 'Update' : createPropertyIds.length > 0 ? `Create & Assign` : 'Create'}
               </Button>
             </div>
           </form>
