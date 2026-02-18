@@ -1,7 +1,7 @@
 from app.models.user import User, UserRole
 from app.models.property import Property
 from app.models.supplier import Supplier
-from app.models.master_product import MasterProduct
+from app.models.master_product import MasterProduct, ProductCategory
 from app.models.inventory import InventoryItem, InventoryCount, InventoryCountItem, UnitType, ReceiptCodeAlias
 from app.models.order import Order, OrderItem, OrderStatus, OrderItemFlag
 from app.models.receipt import Receipt
@@ -13,6 +13,7 @@ __all__ = [
     "Property",
     "Supplier",
     "MasterProduct",
+    "ProductCategory",
     "InventoryItem",
     "InventoryCount",
     "InventoryCountItem",

@@ -10,10 +10,11 @@ import Modal from '@/components/ui/Modal';
 import { useAuthStore } from '@/stores/authStore';
 import { useInventoryItems, useCreateInventoryItem, useUpdateInventoryItem, useDeleteInventoryItem, useInventoryCounts, useCreateInventoryCount } from '@/hooks/useInventory';
 import { useSuppliers } from '@/hooks/useSuppliers';
+import { useCustomCategories } from '@/hooks/useMasterProducts';
 import api from '@/lib/api';
 import type { InventoryItem, CreateInventoryItemPayload, InventoryCount } from '@/types';
 import toast from 'react-hot-toast';
-import { UNITS, SUBCATEGORY_DEFAULT_UNITS } from '@/lib/constants';
+import { UNITS, SUBCATEGORY_DEFAULT_UNITS, CATEGORIES as HARDCODED_CATEGORIES } from '@/lib/constants';
 
 interface ExtractedCount {
   item_id: number;
@@ -23,13 +24,9 @@ interface ExtractedCount {
   notes?: string;
 }
 
-const CATEGORIES = ['Bakery', 'Beverages', 'Cleaning Supplies', 'Condiments', 'Dairy', 'Dry Goods', 'Frozen', 'Packaged Snacks', 'Paper & Plastic Goods', 'Produce', 'Protein', 'Spices', 'Other'];
-
-const SUBCATEGORIES: Record<string, string[]> = {
+const HARDCODED_SUBCATEGORIES: Record<string, string[]> = {
   'Beverages': ['BIB', 'Cans/Bottles', 'Dry', 'Concentrate'],
 };
-
-// UNITS and SUBCATEGORY_DEFAULT_UNITS imported from @/lib/constants
 
 function groupByCategory(items: InventoryItem[]) {
   return items.reduce((acc, item) => {
@@ -59,6 +56,24 @@ export default function InventoryPage() {
   const updateItem = useUpdateInventoryItem();
   const deleteItem = useDeleteInventoryItem();
   const createCount = useCreateInventoryCount();
+  const { data: customCategories = [] } = useCustomCategories();
+
+  // Merge hardcoded + custom categories
+  const CATEGORIES: string[] = (() => {
+    const customCats = customCategories.filter(c => !c.parent_name).map(c => c.name);
+    const merged = [...HARDCODED_CATEGORIES, ...customCats.filter(c => !HARDCODED_CATEGORIES.includes(c as any))];
+    return merged.sort();
+  })();
+
+  // Merge hardcoded + custom subcategories
+  const SUBCATEGORIES: Record<string, string[]> = (() => {
+    const merged: Record<string, string[]> = { ...HARDCODED_SUBCATEGORIES };
+    customCategories.filter(c => c.parent_name).forEach(c => {
+      if (!merged[c.parent_name!]) merged[c.parent_name!] = [];
+      if (!merged[c.parent_name!].includes(c.name)) merged[c.parent_name!].push(c.name);
+    });
+    return merged;
+  })();
 
   const [search, setSearch] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());

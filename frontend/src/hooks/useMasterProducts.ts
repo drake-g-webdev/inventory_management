@@ -207,3 +207,47 @@ export function useCleanupDuplicateAssignments() {
     },
   });
 }
+
+// ============== CUSTOM CATEGORIES ==============
+
+export interface CustomCategory {
+  id: number;
+  name: string;
+  parent_name: string | null;
+  sort_order: number;
+}
+
+export function useCustomCategories() {
+  return useQuery({
+    queryKey: ['custom-categories'],
+    queryFn: async () => {
+      const response = await api.get<CustomCategory[]>('/master-products/categories/custom');
+      return response.data;
+    },
+  });
+}
+
+export function useCreateCustomCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { name: string; parent_name?: string | null }) => {
+      const response = await api.post<CustomCategory>('/master-products/categories/custom', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['custom-categories'] });
+    },
+  });
+}
+
+export function useDeleteCustomCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/master-products/categories/custom/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['custom-categories'] });
+    },
+  });
+}

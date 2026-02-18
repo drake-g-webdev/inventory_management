@@ -21,7 +21,9 @@ import {
   useUploadMasterProductsCSV,
   useUnlinkedInventoryItems,
   useCleanupNonRecurring,
-  useCleanupDuplicateAssignments
+  useCleanupDuplicateAssignments,
+  useCustomCategories,
+  useCreateCustomCategory,
 } from '@/hooks/useMasterProducts';
 import { useProperties } from '@/hooks/useProperties';
 import { useSuppliers } from '@/hooks/useSuppliers';
@@ -29,7 +31,7 @@ import type { MasterProduct, CreateMasterProductPayload, Property } from '@/type
 import toast from 'react-hot-toast';
 import { UNITS, CATEGORIES } from '@/lib/constants';
 
-const SUBCATEGORIES: Record<string, string[]> = {
+const HARDCODED_SUBCATEGORIES: Record<string, string[]> = {
   'Beverages': ['BIB', 'Cans/Bottles', 'Dry', 'Concentrate'],
   'Frozen': ['Meat', 'Bread', 'Desserts'],
 };
@@ -74,6 +76,31 @@ export default function MasterProductsPage() {
   const uploadCSV = useUploadMasterProductsCSV();
   const cleanupNonRecurring = useCleanupNonRecurring();
   const cleanupDuplicates = useCleanupDuplicateAssignments();
+  const { data: customCategories = [] } = useCustomCategories();
+  const createCustomCategory = useCreateCustomCategory();
+
+  // Merge hardcoded + custom categories
+  const allCategories: string[] = (() => {
+    const customCats = customCategories.filter(c => !c.parent_name).map(c => c.name);
+    const merged = [...CATEGORIES, ...customCats.filter(c => !CATEGORIES.includes(c as any))];
+    return merged.sort();
+  })();
+
+  // Merge hardcoded + custom subcategories
+  const SUBCATEGORIES: Record<string, string[]> = (() => {
+    const merged: Record<string, string[]> = { ...HARDCODED_SUBCATEGORIES };
+    customCategories.filter(c => c.parent_name).forEach(c => {
+      if (!merged[c.parent_name!]) merged[c.parent_name!] = [];
+      if (!merged[c.parent_name!].includes(c.name)) merged[c.parent_name!].push(c.name);
+    });
+    return merged;
+  })();
+
+  // State for adding new categories inline
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showNewSubcategory, setShowNewSubcategory] = useState(false);
+  const [newSubcategoryName, setNewSubcategoryName] = useState('');
 
   // Modal states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -697,39 +724,249 @@ export default function MasterProductsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select
-                  value={formData.category || ''}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value, subcategory: '' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Select Category</option>
-                  {CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                {showNewCategory ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="New category name"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (newCategoryName.trim()) {
+                            createCustomCategory.mutate({ name: newCategoryName.trim() }, {
+                              onSuccess: () => {
+                                setFormData({ ...formData, category: newCategoryName.trim(), subcategory: '' });
+                                setNewCategoryName('');
+                                setShowNewCategory(false);
+                                toast.success(`Category "${newCategoryName.trim()}" created`);
+                              },
+                              onError: (err: any) => toast.error(err.response?.data?.detail || 'Failed to create category'),
+                            });
+                          }
+                        } else if (e.key === 'Escape') {
+                          setShowNewCategory(false);
+                          setNewCategoryName('');
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newCategoryName.trim()) {
+                          createCustomCategory.mutate({ name: newCategoryName.trim() }, {
+                            onSuccess: () => {
+                              setFormData({ ...formData, category: newCategoryName.trim(), subcategory: '' });
+                              setNewCategoryName('');
+                              setShowNewCategory(false);
+                              toast.success(`Category "${newCategoryName.trim()}" created`);
+                            },
+                            onError: (err: any) => toast.error(err.response?.data?.detail || 'Failed to create category'),
+                          });
+                        }
+                      }}
+                      className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewCategory(false); setNewCategoryName(''); }}
+                      className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.category || ''}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value, subcategory: '' })}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="">Select Category</option>
+                      {allCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCategory(true)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600"
+                      title="Add new category"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {formData.category && SUBCATEGORIES[formData.category] ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subcategory</label>
-                  <select
-                    value={formData.subcategory || ''}
-                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Select Subcategory</option>
-                    {SUBCATEGORIES[formData.category].map(sub => (
-                      <option key={sub} value={sub}>{sub}</option>
-                    ))}
-                  </select>
+                  {showNewSubcategory ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newSubcategoryName}
+                        onChange={(e) => setNewSubcategoryName(e.target.value)}
+                        placeholder="New subcategory name"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (newSubcategoryName.trim()) {
+                              createCustomCategory.mutate({ name: newSubcategoryName.trim(), parent_name: formData.category }, {
+                                onSuccess: () => {
+                                  setFormData({ ...formData, subcategory: newSubcategoryName.trim() });
+                                  setNewSubcategoryName('');
+                                  setShowNewSubcategory(false);
+                                  toast.success(`Subcategory "${newSubcategoryName.trim()}" created`);
+                                },
+                                onError: (err: any) => toast.error(err.response?.data?.detail || 'Failed to create subcategory'),
+                              });
+                            }
+                          } else if (e.key === 'Escape') {
+                            setShowNewSubcategory(false);
+                            setNewSubcategoryName('');
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newSubcategoryName.trim()) {
+                            createCustomCategory.mutate({ name: newSubcategoryName.trim(), parent_name: formData.category }, {
+                              onSuccess: () => {
+                                setFormData({ ...formData, subcategory: newSubcategoryName.trim() });
+                                setNewSubcategoryName('');
+                                setShowNewSubcategory(false);
+                                toast.success(`Subcategory "${newSubcategoryName.trim()}" created`);
+                              },
+                              onError: (err: any) => toast.error(err.response?.data?.detail || 'Failed to create subcategory'),
+                            });
+                          }
+                        }}
+                        className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewSubcategory(false); setNewSubcategoryName(''); }}
+                        className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <select
+                        value={formData.subcategory || ''}
+                        onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Select Subcategory</option>
+                        {SUBCATEGORIES[formData.category].map(sub => (
+                          <option key={sub} value={sub}>{sub}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewSubcategory(true)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600"
+                        title="Add new subcategory"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : formData.category ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Subcategory</label>
+                  {showNewSubcategory ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newSubcategoryName}
+                        onChange={(e) => setNewSubcategoryName(e.target.value)}
+                        placeholder="New subcategory name"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (newSubcategoryName.trim()) {
+                              createCustomCategory.mutate({ name: newSubcategoryName.trim(), parent_name: formData.category }, {
+                                onSuccess: () => {
+                                  setFormData({ ...formData, subcategory: newSubcategoryName.trim() });
+                                  setNewSubcategoryName('');
+                                  setShowNewSubcategory(false);
+                                  toast.success(`Subcategory "${newSubcategoryName.trim()}" created`);
+                                },
+                                onError: (err: any) => toast.error(err.response?.data?.detail || 'Failed to create subcategory'),
+                              });
+                            }
+                          } else if (e.key === 'Escape') {
+                            setShowNewSubcategory(false);
+                            setNewSubcategoryName('');
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newSubcategoryName.trim()) {
+                            createCustomCategory.mutate({ name: newSubcategoryName.trim(), parent_name: formData.category }, {
+                              onSuccess: () => {
+                                setFormData({ ...formData, subcategory: newSubcategoryName.trim() });
+                                setNewSubcategoryName('');
+                                setShowNewSubcategory(false);
+                                toast.success(`Subcategory "${newSubcategoryName.trim()}" created`);
+                              },
+                              onError: (err: any) => toast.error(err.response?.data?.detail || 'Failed to create subcategory'),
+                            });
+                          }
+                        }}
+                        className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewSubcategory(false); setNewSubcategoryName(''); }}
+                        className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        id="subcategory"
+                        label=""
+                        value={formData.subcategory || ''}
+                        onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
+                        placeholder="Type or add subcategory"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewSubcategory(true)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-primary-600 mt-0"
+                        title="Add new subcategory"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <Input
-                  id="subcategory"
-                  label="Subcategory"
-                  value={formData.subcategory || ''}
-                  onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                />
+                <div />
               )}
             </div>
 

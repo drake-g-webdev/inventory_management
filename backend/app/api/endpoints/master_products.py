@@ -8,7 +8,7 @@ import io
 from app.core.database import get_db
 from app.core.security import require_admin
 from app.models.user import User
-from app.models.master_product import MasterProduct
+from app.models.master_product import MasterProduct, ProductCategory
 from app.models.inventory import InventoryItem
 from app.models.property import Property
 from app.models.supplier import Supplier
@@ -840,3 +840,75 @@ async def upload_master_products_csv(
         error_count=len(errors),
         errors=errors[:20]  # Limit errors returned
     )
+
+
+# ============== PRODUCT CATEGORIES ==============
+
+@router.get("/categories/custom")
+def list_custom_categories(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """List all custom product categories and subcategories"""
+    cats = db.query(ProductCategory).filter(
+        ProductCategory.is_active == True
+    ).order_by(ProductCategory.parent_name, ProductCategory.sort_order, ProductCategory.name).all()
+
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "parent_name": c.parent_name,
+            "sort_order": c.sort_order,
+        }
+        for c in cats
+    ]
+
+
+@router.post("/categories/custom")
+def create_custom_category(
+    data: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Create a custom category or subcategory"""
+    name = data.get("name", "").strip()
+    parent_name = data.get("parent_name")  # null = top-level category
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    # Check for duplicates
+    existing = db.query(ProductCategory).filter(
+        ProductCategory.name == name,
+        ProductCategory.parent_name == parent_name,
+        ProductCategory.is_active == True
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Category already exists")
+
+    cat = ProductCategory(name=name, parent_name=parent_name)
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+
+    return {
+        "id": cat.id,
+        "name": cat.name,
+        "parent_name": cat.parent_name,
+        "sort_order": cat.sort_order,
+    }
+
+
+@router.delete("/categories/custom/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_custom_category(
+    category_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Delete a custom category"""
+    cat = db.query(ProductCategory).filter(ProductCategory.id == category_id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    db.delete(cat)
+    db.commit()

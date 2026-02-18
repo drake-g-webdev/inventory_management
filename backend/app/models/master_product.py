@@ -56,3 +56,19 @@ class MasterProduct(Base):
 
     def __repr__(self):
         return f"<MasterProduct(id={self.id}, name='{self.name}')>"
+
+
+class ProductCategory(Base):
+    """
+    Custom product categories and subcategories.
+    Supplements the hardcoded defaults to allow admin to organize products flexibly.
+    parent_name is null for top-level categories, or the category name for subcategories.
+    """
+    __tablename__ = "product_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    parent_name = Column(String(100), nullable=True, index=True)  # null = category, non-null = subcategory
+    sort_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
