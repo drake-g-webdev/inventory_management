@@ -7,15 +7,30 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 import os
+import sys
 import logging
 import traceback
+
+# Configure logging early
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("sukakpak")
 
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.router import api_router
 
 # Create database tables
-Base.metadata.create_all(bind=engine)
+logger.info("Creating database tables...")
+try:
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully")
+except Exception as e:
+    logger.error(f"Failed to create database tables: {e}")
+    logger.error(traceback.format_exc())
 
 # Add missing columns to existing tables (for deployments without migrations)
 def add_missing_columns():
@@ -138,10 +153,12 @@ def add_missing_columns():
         except Exception as e:
             print(f"Note: Could not check/add order_at column: {e}")
 
+logger.info("Running column migrations...")
 try:
     add_missing_columns()
+    logger.info("Column migrations completed successfully")
 except Exception as e:
-    print(f"Warning: Could not run column migrations: {e}")
+    logger.warning(f"Could not run column migrations: {e}")
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -192,6 +209,17 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error"}
     )
 
+# Startup/shutdown events
+@app.on_event("startup")
+async def startup_event():
+    logger.info("FastAPI application startup complete - ready to serve requests")
+    logger.info(f"CORS allowed origins: {allowed_origins}")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("FastAPI application shutting down")
+
 # Include API routes
 app.include_router(api_router)
 
@@ -208,4 +236,20 @@ def root():
 
 @app.get("/health")
 def health_check():
+    """Basic health check - responds quickly for Railway deploy checks"""
     return {"status": "healthy"}
+
+
+@app.get("/health/db")
+def health_check_db():
+    """Extended health check that verifies database connectivity"""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "database": str(e)}
+        )
